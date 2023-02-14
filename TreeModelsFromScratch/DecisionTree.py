@@ -1,3 +1,5 @@
+import math
+
 import numpy as np
 import pandas as pd
 from collections import Counter
@@ -9,7 +11,8 @@ from warnings import warn, catch_warnings, simplefilter
 class Node:
     def __init__(self, feature=None, feature_name=None, threshold=None, left=None, right=None,
                  gain=None, id=None, depth=None, leaf_node=False, samples=None, gini=None,
-                 value=None, clf_value_dis=None, clf_prob_dis=None):
+                 value=None, clf_value_dis=None, clf_prob_dis=None,
+                 gain_before_permutation: float = None, gain_after_permutation: float = None):
         """A Node class for classification and regression trees.
 
         Parameters
@@ -23,7 +26,7 @@ class Node:
             - "samples": Training samples in that node
             - "value": Predicted value in that node
             - "value_distribution": Distribution between class 0 and class 1 (For classification only)
-            - "prob_distribution": Probabilityd distribution between class 0 and class 1 (For classification only)
+            - "prob_distribution": Probability distribution between class 0 and class 1 (For classification only)
 
         feature: int
             Id of feature used for splitting in this node (if not leaf note). Id
@@ -55,6 +58,8 @@ class Node:
             Number of samples in the Node
         leaf_node: bool
             If Node is Leaf Node or not
+        gain_before_permutation: float
+        gain_after_permutation: float
         """
 
         self.feature = feature
@@ -71,6 +76,9 @@ class Node:
         self.depth = depth
         self.samples = samples
         self.leaf_node = leaf_node
+        self.gain_before_permutation = gain_before_permutation
+        self.gain_after_permutation = gain_after_permutation
+
 
     def is_leaf_node(self):
         return self.leaf_node is not False
@@ -78,7 +86,8 @@ class Node:
 
 class DecisionTree:
     def __init__(self, min_samples_split=2, min_samples_leaf=1, max_depth=None, n_features=None, criterion="gini",
-                 treetype="classification", k=None, feature_names=None, HShrinkage=False, HS_lambda=0, random_state=None):
+                 treetype="classification", k=None, feature_names=None, HShrinkage=False, HS_lambda=0,
+                 random_state=None):
         """A decision tree model for classification or regression tasks (CART).
 
         Parameters
@@ -291,6 +300,11 @@ class DecisionTree:
                     node.id]["prob_distribution"] = list(node.clf_prob_dis)
 
     def _grow_tree(self, X, y, depth=0, feature_names=None):
+        """
+        Grow tree
+
+        """
+
         n_samples, n_feats = X.shape
         n_labels = len(np.unique(y))
 
@@ -319,17 +333,39 @@ class DecisionTree:
         feat_idxs = self.random_state_.choice(n_feats, self.n_features, replace=False)
 
         # find the best split
-        best_feature, best_thresh, best_gain = self._best_split(X, y, feat_idxs)
+        best_feature_before_permutation, best_thresh_before_permutation, best_gain_before_permutation = \
+            self._best_split(X, y, feat_idxs)
 
         # If no imporvement is found: Create leaf
-        if (best_gain==-1) or (best_feature is None) or (best_thresh is None):
+        if (best_gain_before_permutation==-1) or \
+                (best_feature_before_permutation is None) or \
+                (best_thresh_before_permutation is None):
             node = self._create_leaf(leaf_value, clf_value_dis, clf_prob_dis,
                                 y, depth, n_samples)
             return node
 
-        # split samples in left and right child
-        left_idxs, right_idxs = self._split(X[:, best_feature], best_thresh)
-        #print(left_idxs, right_idxs)
+        # split samples in left and right child ------------------------------------------------------------------------
+        ################################################################################################################
+        # PERMUTATION !!! ==============================================================================================
+        ################################################################################################################
+        X_best_feature = X[:, best_feature_before_permutation]
+        X_best_permuted = copy.deepcopy(X_best_feature)
+        np.random.shuffle(X_best_permuted)
+        X_best_permuted = X_best_permuted.reshape(-1, 1)
+
+        permutation_feat_idxs = [0]
+        best_feature_after_permutation, best_thresh_after_permutation, best_gain_after_permutation = \
+            self._best_split(X_best_permuted, y, permutation_feat_idxs)
+
+        # print(f"Gain Before permutation: {best_gain_before_permutation}, "
+        #      f"Gain after permutation: {best_gain_after_permutation}")
+        # print("-------------------------------------------------------------------------------------------------------")
+        ################################################################################################################
+        ################################################################################################################
+        ################################################################################################################
+
+        left_idxs, right_idxs = self._split(X[:, best_feature_before_permutation], best_thresh_before_permutation)
+        # print(left_idxs, right_idxs)
 
         # If no of childs on one side is smaller than the parameter value: Create leaf
         if (len(left_idxs) < self.min_samples_leaf) or (
@@ -346,21 +382,24 @@ class DecisionTree:
 
         best_feature_name=None
         if feature_names is not None:
-            best_feature_name = feature_names[best_feature]
+            best_feature_name = feature_names[best_feature_before_permutation]
 
         # Creates inner nodes and root node of the tree
-        node = Node(best_feature,
+        node = Node(best_feature_before_permutation,
                     best_feature_name,
-                    best_thresh,
+                    best_thresh_before_permutation,
                     left,
                     right,
-                    best_gain,
+                    best_gain_before_permutation,
                     gini=self._gini(y),
                     depth=depth,
                     value=leaf_value,
                     clf_value_dis=clf_value_dis,
                     clf_prob_dis=clf_prob_dis,
-                    samples=n_samples)
+                    samples=n_samples,
+                    gain_before_permutation=best_gain_before_permutation,
+                    gain_after_permutation=best_gain_after_permutation)
+
         self.node_list.append(node)
         return node
 
@@ -378,9 +417,10 @@ class DecisionTree:
 
         return node
 
-
-
     def _best_split(self, X, y, feat_idxs):
+        """
+        Best split
+        """
 
         best_gain = np.array([-1])
         split_idx, split_threshold = None, None
@@ -472,8 +512,13 @@ class DecisionTree:
 
 
     def _split(self, X_column, split_thresh):
+        """
+        Split
+        """
+
         left_idxs = np.argwhere(X_column <= split_thresh).flatten()
         right_idxs = np.argwhere(X_column > split_thresh).flatten()
+
         return left_idxs, right_idxs
 
     def _entropy(self, y):
@@ -651,7 +696,19 @@ class DecisionTree:
 
         return np.array([self.traverse_explain_path(x, self.root) for x in X], dtype="object")
 
-    def _apply_hierarchical_srinkage(self, treetype=None, HS_lambda=None, smSHAP_coefs=None, m_nodes=None, testHS=False):
+    def _apply_hierarchical_srinkage(self,
+                                     treetype=None,
+                                     HS_lambda=None,
+                                     smSHAP_coefs=None,
+                                     m_nodes=None,
+                                     testHS=False):
+        """
+        :param treetype:
+        :param HS_lambda:
+        :param smSHAP_coefs:
+        :param m_nodes:
+        :param testHS:
+        """
 
         if treetype==None:
             treetype = self.treetype
@@ -674,9 +731,18 @@ class DecisionTree:
                         node_values_HS[node_id] = cum_sum
                         continue
 
+                    # Current and parrent node -------------------------------------------------------------------------
                     current_node = self.node_list[node_id]
                     node_id_parent = decision_path[l-1]
                     parent_node = self.node_list[node_id_parent]
+
+                    ####################################################################################################
+                    # [0.] Lambda multiplier ===========================================================================
+                    ####################################################################################################
+                    epsilon = 1e-5
+                    lambda_multiplier = 1 - (parent_node.gain_after_permutation + epsilon) / (parent_node.gain_before_permutation + epsilon)
+                    if lambda_multiplier < 0.0:
+                        lambda_multiplier = 0.0
 
                     # Use HS with Smooth SHAP if coefs are given
                     if (smSHAP_coefs!=None):
@@ -693,6 +759,10 @@ class DecisionTree:
                     #     cum_sum += ((current_node.value - parent_node.value) / (
                     #         1 + HS_lambda*(1-* np.abs(smSHAP_coefs[parent_node.feature]))/parent_node.samples))
 
+                    ####################################################################################################
+                    # SHRINKAGE ========================================================================================
+                    ####################################################################################################
+
                     # Use HS with nodewise smoothing if m_nodes are given
                     elif (m_nodes!=None):
                         cum_sum += ((current_node.value - parent_node.value) / (
@@ -701,12 +771,17 @@ class DecisionTree:
                     # test m_shrinkage of lambda instead of expected term
                     elif (m_nodes!=None) & (testHS==True):
                         cum_sum += ((current_node.value - parent_node.value) / (
-                             1 + HS_lambda* (1-m_nodes[node_id])/parent_node.samples))
+                             1 + HS_lambda * (1-m_nodes[node_id])/parent_node.samples))
 
                     # Use Orignal HS
                     else:
+                        # print(f"Original multiplier: {lambda_multiplier}")
                         cum_sum += ((current_node.value - parent_node.value) / (
-                            1 + HS_lambda/parent_node.samples))
+                            1 + HS_lambda * lambda_multiplier/parent_node.samples))
+
+                    ####################################################################################################
+                    ####################################################################################################
+                    ####################################################################################################
 
                     # Replace value of node with HS value outcome
                     node_values_HS[node_id] = cum_sum
@@ -744,6 +819,14 @@ class DecisionTree:
                     node_id_parent = decision_path[l - 1]
                     parent_node = self.node_list[node_id_parent]
 
+                    ####################################################################################################
+                    # [0.] Lambda multiplier ===========================================================================
+                    ####################################################################################################
+                    epsilon = 1e-5
+                    lambda_multiplier = 1 - (parent_node.gain_after_permutation + epsilon) / (parent_node.gain_before_permutation + epsilon)
+                    if lambda_multiplier < 0.0:
+                        lambda_multiplier = 0.0
+
                     # Use Selective HS using Smooth SHAP
                     if (smSHAP_coefs!=None):
                         cum_sum += ((clf_prob_dist[node_id]-clf_prob_dist[node_id_parent])/
@@ -772,8 +855,10 @@ class DecisionTree:
 
                     # Use Original HS
                     else:
+                        # print(f"HS_lambda: {HS_lambda}, lambda_multiplier: {lambda_multiplier}")
+
                         cum_sum += ((clf_prob_dist[node_id]-clf_prob_dist[node_id_parent])/
-                            (1 + HS_lambda / node_samples[node_id_parent]))
+                                    (1 + (HS_lambda * lambda_multiplier) / node_samples[node_id_parent]))
 
                     node_values_[node_id] = cum_sum
                 for node_id in decision_path:
@@ -786,6 +871,7 @@ class DecisionTree:
 
         #set attribute to indicate that HS was applied
         self.HS_applied = True
+        # print("-------------------------------------------------------------------------------------------------------")
 
     def _get_feature_importance(self, X):
 
