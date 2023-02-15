@@ -6,13 +6,17 @@ from collections import Counter
 import copy
 import numbers
 from warnings import warn, catch_warnings, simplefilter
-#import ipdb
+# import ipdb
+
+from plots.gain_difference_plots import gain_diff_plots
+
 
 class Node:
     def __init__(self, feature=None, feature_name=None, threshold=None, left=None, right=None,
                  gain=None, id=None, depth=None, leaf_node=False, samples=None, gini=None,
                  value=None, clf_value_dis=None, clf_prob_dis=None,
-                 gain_before_permutation: float = None, gain_after_permutation: float = None):
+                 gain_before_permutation: float = None, gain_after_permutation: float = None,
+                 permuted_rows_nr: float = None):
         """A Node class for classification and regression trees.
 
         Parameters
@@ -78,7 +82,7 @@ class Node:
         self.leaf_node = leaf_node
         self.gain_before_permutation = gain_before_permutation
         self.gain_after_permutation = gain_after_permutation
-
+        self.permuted_rows_nr = permuted_rows_nr
 
     def is_leaf_node(self):
         return self.leaf_node is not False
@@ -277,6 +281,9 @@ class DecisionTree:
         #Set feature_importances_ (information_gain_scaled) as class attribute
         self._get_feature_importance(X)
 
+        # Plot gain differences ----------------------------------------------------------------------------------------
+        gain_diff_plots(self.node_list)
+
 
     def _create_node_dict(self):
         '''Create dict of dict for all nodes with important attributes per node'''
@@ -349,8 +356,14 @@ class DecisionTree:
         # PERMUTATION !!! ==============================================================================================
         ################################################################################################################
         X_best_feature = X[:, best_feature_before_permutation]
+        permuted_rows_nr = X_best_feature.shape[0]
         X_best_permuted = copy.deepcopy(X_best_feature)
         np.random.shuffle(X_best_permuted)
+        while np.array_equal(X_best_feature, X_best_permuted):
+            print("X_best_feature and X_best_permuted equal. Reshuffling again!")
+            print(X_best_feature, X_best_permuted)
+            np.random.shuffle(X_best_permuted)
+
         X_best_permuted = X_best_permuted.reshape(-1, 1)
 
         permutation_feat_idxs = [0]
@@ -398,7 +411,9 @@ class DecisionTree:
                     clf_prob_dis=clf_prob_dis,
                     samples=n_samples,
                     gain_before_permutation=best_gain_before_permutation,
-                    gain_after_permutation=best_gain_after_permutation)
+                    gain_after_permutation=best_gain_after_permutation,
+                    permuted_rows_nr=permuted_rows_nr
+                    )
 
         self.node_list.append(node)
         return node
@@ -874,6 +889,9 @@ class DecisionTree:
         # print("-------------------------------------------------------------------------------------------------------")
 
     def _get_feature_importance(self, X):
+        """
+
+        """
 
         feature_importance = np.zeros(X.shape[1]) # empty array in shape of n. features
         features_list = [i.feature for i in self.node_list] #feature per node (which was used to split)
@@ -893,7 +911,6 @@ class DecisionTree:
             feature_importance_scaled = feature_importance
 
         self.feature_importances_ = feature_importance_scaled
-
 
     def export_tree_for_SHAP(self, return_tree_dict=False):
         """

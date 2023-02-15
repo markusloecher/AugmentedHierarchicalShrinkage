@@ -66,7 +66,9 @@ y_pred_prob = dt.predict_proba(X_test)                              # Predict pr
 roc_auc_performance = roc_auc_score(y_test, y_pred)                 # ROC AUC score on test set
 print(f"ROC-AUC performance mit fancy shrinkage: {roc_auc_performance}")
 
-
+########################################################################################################################
+########################################################################################################################
+########################################################################################################################
 """
 mdi_feature = pd.DataFrame(rf.feature_importances_.reshape(1, 4), columns=rf.feature_names)
 print("MDI feature:")
