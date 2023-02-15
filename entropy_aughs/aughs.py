@@ -38,7 +38,6 @@ def _shrink_tree_rec(dt, shrink_mode, lmb=0,
     parent_num_samples = dt.tree_.n_node_samples[parent_node]
     parent_feature = dt.tree_.feature[parent_node]
     value = deepcopy(dt.tree_.value[node, :, :] / dt.tree_.value[node].sum())
-    print(value)
 
     # cum_sum contains the value of the telescopic sum
     # If root: initialize cum_sum to the value of the root node
