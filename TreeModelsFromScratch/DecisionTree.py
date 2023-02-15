@@ -218,6 +218,8 @@ class DecisionTree:
         self.HS_applied = False # to store whether HS already was applied duing fit
         self.b_use_hs_lambda_multiplier = b_use_hs_lambda_multiplier
 
+        self.grus_dict = {}
+
     def _check_random_state(self, seed):
         if isinstance(seed, numbers.Integral) or (seed is None):
             return np.random.RandomState(seed)
@@ -280,8 +282,9 @@ class DecisionTree:
         depth_list = [len(i) for i in self.decision_paths]
         self.max_depth_ = max(depth_list)-1
 
-        #Set feature_importances_ (information_gain_scaled) as class attribute
+        # Set feature_importances_ (information_gain_scaled) as class attribute ----------------------------------------
         self._get_feature_importance(X)
+        print(self.feature_importances_)
 
         # Plot gain differences ----------------------------------------------------------------------------------------
         # gain_diff_plots(self.node_list)
@@ -360,10 +363,13 @@ class DecisionTree:
         permuted_rows_nr = X_best_feature.shape[0]
         X_best_permuted = copy.deepcopy(X_best_feature)
         np.random.shuffle(X_best_permuted)
-        while np.array_equal(X_best_feature, X_best_permuted):
+
+        loop_cnt = 0
+        while np.array_equal(X_best_feature, X_best_permuted) and loop_cnt < 5:
             # print("X_best_feature and X_best_permuted equal. Reshuffling again!")
             # print(X_best_feature, X_best_permuted)
             np.random.shuffle(X_best_permuted)
+            loop_cnt += 1
 
         X_best_permuted = X_best_permuted.reshape(-1, 1)
 
@@ -398,7 +404,7 @@ class DecisionTree:
         if feature_names is not None:
             best_feature_name = feature_names[best_feature_before_permutation]
 
-        # Creates inner nodes and root node of the tree
+        # Creates inner nodes and root node of the tree ----------------------------------------------------------------
         node = Node(best_feature_before_permutation,
                     best_feature_name,
                     best_thresh_before_permutation,
@@ -417,6 +423,7 @@ class DecisionTree:
                     )
 
         self.node_list.append(node)
+
         return node
 
 
@@ -522,7 +529,7 @@ class DecisionTree:
             child_gini = (n_l/n) * g_l + (n_r/n) * g_r
 
             # calculate the IG (weighted impurity decrease) (rescaled gain) ==MDI
-            information_gain = (n / self.no_samples_total) * (parent_gini -child_gini)
+            information_gain = (n / self.no_samples_total) * (parent_gini - child_gini)
 
         return information_gain
 
@@ -877,11 +884,17 @@ class DecisionTree:
                         if not self.b_use_hs_lambda_multiplier:
                             lambda_multiplier = 1.0
 
-                        # print(f"Use the lambda_multiplier: {self.b_use_hs_lambda_multiplier}, "
-                        #      f"HS_lambda: {HS_lambda}, lambda_multiplier: {lambda_multiplier}")
+                        gru_factor = lambda_multiplier / (1 + HS_lambda / node_samples[node_id_parent])
 
-                        cum_sum += ((clf_prob_dist[node_id]-clf_prob_dist[node_id_parent])/
-                                    (1 + (HS_lambda * lambda_multiplier) / node_samples[node_id_parent]))
+                        # print(f"HS_lambda: {HS_lambda}, node_samples[node_id_parent] {node_samples[node_id_parent]}, "
+                        #      f"lambda_multiplier: {lambda_multiplier}, gru_factor:{gru_factor}")
+
+                        self.grus_dict[node_id] = gru_factor
+
+                        parent_node.gain_before_permutation = parent_node.gain_before_permutation * \
+                                                              math.pow(gru_factor, 2.0)
+
+                        cum_sum += ((clf_prob_dist[node_id]-clf_prob_dist[node_id_parent])) * gru_factor
 
                     node_values_[node_id] = cum_sum
                 for node_id in decision_path:
@@ -892,9 +905,12 @@ class DecisionTree:
                 self.node_list[node_id].clf_prob_dis = node_values_HS[node_id]
                 self.node_list[node_id].value = np.argmax(self.node_list[node_id].clf_prob_dis)
 
-        #set attribute to indicate that HS was applied
+        # set attribute to indicate that HS was applied
         self.HS_applied = True
-        # print("-------------------------------------------------------------------------------------------------------")
+
+        print("Grus DICT:")
+        print(self.grus_dict)
+        # print("-----------------------------------------------------------------------------------------------------")
 
     def _get_feature_importance(self, X):
         """
@@ -1055,7 +1071,6 @@ class DecisionTree:
             node_vals = np.nanmean(y_vals_array, axis=1)
 
             return node_vals, result, nan_rows, y_vals_array
-
 
         elif self.treetype == "classification":
 

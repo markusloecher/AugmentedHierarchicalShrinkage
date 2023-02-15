@@ -9,11 +9,13 @@ from shap.explainers._tree import SingleTree
 from shap import TreeExplainer
 from TreeModelsFromScratch.SmoothShap import verify_shap_model, smooth_shap, conf_int_ratio_two_var, conf_int_cohens_d, conf_int_ratio_mse_ratio
 
+from plots.feature_importance_plots import plot_feature_importances_hist_matplotlib
+
 class RandomForest:
     def __init__(self, n_trees=10, max_depth=None, min_samples_split=2, min_samples_leaf=1, n_feature="sqrt",
                  bootstrap=True, oob=True, oob_SHAP=False, criterion="gini", treetype="classification", HShrinkage=False,
                  HS_lambda=0, HS_smSHAP=False, HS_nodewise_shrink_type=None, cohen_reg_param=2, alpha=0.05,
-                 cohen_statistic="f", k=None, random_state=None, testHS=False):
+                 cohen_statistic="f", k=None, random_state=None, testHS=False, b_use_hs_lambda_multiplier=False):
         """A random forest model for classification or regression tasks.
 
         Parameters
@@ -131,6 +133,7 @@ class RandomForest:
         self.smSHAP_HS_applied = False
         self.nodewise_HS_applied = False
         self.testHS = testHS
+        self.b_use_hs_lambda_multiplier = b_use_hs_lambda_multiplier
 
     def _check_random_state(self, seed):
         if isinstance(seed, numbers.Integral) or seed==None:
@@ -194,7 +197,8 @@ class RandomForest:
                                 HShrinkage=self.HShrinkage,
                                 HS_lambda=self.HS_lambda,
                                 k=self.k,
-                                random_state=seed)#self.random_state)
+                                b_use_hs_lambda_multiplier=self.b_use_hs_lambda_multiplier,
+                                random_state=seed)  #self.random_state)
 
             #Draw bootstrap samples (inbag)
             X_inbag, y_inbag, idxs_inbag = self._bootstrap_samples(
@@ -202,6 +206,7 @@ class RandomForest:
 
             # Fit tree using inbag samples
             tree.fit(X_inbag, y_inbag)
+
             self.trees.append(tree) #Add tree to forest
             feature_importance_trees[i, :] = tree.feature_importances_ #add feature importance to array
 
@@ -254,6 +259,9 @@ class RandomForest:
 
         # Calculate and set feature importance of forest as class attribute
         self.feature_importances_ = feature_importance_trees.mean(axis=0)
+        print(self.feature_importances_)
+
+        plot_feature_importances_hist_matplotlib(self.feature_names, self.feature_importances_)
 
         # Calculate oob_score for all trees within forest
         if self.oob:
