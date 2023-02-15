@@ -91,6 +91,7 @@ class Node:
 class DecisionTree:
     def __init__(self, min_samples_split=2, min_samples_leaf=1, max_depth=None, n_features=None, criterion="gini",
                  treetype="classification", k=None, feature_names=None, HShrinkage=False, HS_lambda=0,
+                 b_use_hs_lambda_multiplier: bool = False,
                  random_state=None):
         """A decision tree model for classification or regression tasks (CART).
 
@@ -215,6 +216,7 @@ class DecisionTree:
         self.oob_preds=None #only relevant for random forests oob
         self.oob_shap = None  #only relevant for random forests oob shap
         self.HS_applied = False # to store whether HS already was applied duing fit
+        self.b_use_hs_lambda_multiplier = b_use_hs_lambda_multiplier
 
     def _check_random_state(self, seed):
         if isinstance(seed, numbers.Integral) or (seed is None):
@@ -282,8 +284,7 @@ class DecisionTree:
         self._get_feature_importance(X)
 
         # Plot gain differences ----------------------------------------------------------------------------------------
-        gain_diff_plots(self.node_list)
-
+        # gain_diff_plots(self.node_list)
 
     def _create_node_dict(self):
         '''Create dict of dict for all nodes with important attributes per node'''
@@ -360,8 +361,8 @@ class DecisionTree:
         X_best_permuted = copy.deepcopy(X_best_feature)
         np.random.shuffle(X_best_permuted)
         while np.array_equal(X_best_feature, X_best_permuted):
-            print("X_best_feature and X_best_permuted equal. Reshuffling again!")
-            print(X_best_feature, X_best_permuted)
+            # print("X_best_feature and X_best_permuted equal. Reshuffling again!")
+            # print(X_best_feature, X_best_permuted)
             np.random.shuffle(X_best_permuted)
 
         X_best_permuted = X_best_permuted.reshape(-1, 1)
@@ -791,6 +792,9 @@ class DecisionTree:
                     # Use Orignal HS
                     else:
                         # print(f"Original multiplier: {lambda_multiplier}")
+                        if not self.b_use_hs_lambda_multiplier:
+                            lambda_multiplier = 1.0
+
                         cum_sum += ((current_node.value - parent_node.value) / (
                             1 + HS_lambda * lambda_multiplier/parent_node.samples))
 
@@ -870,7 +874,11 @@ class DecisionTree:
 
                     # Use Original HS
                     else:
-                        # print(f"HS_lambda: {HS_lambda}, lambda_multiplier: {lambda_multiplier}")
+                        if not self.b_use_hs_lambda_multiplier:
+                            lambda_multiplier = 1.0
+
+                        # print(f"Use the lambda_multiplier: {self.b_use_hs_lambda_multiplier}, "
+                        #      f"HS_lambda: {HS_lambda}, lambda_multiplier: {lambda_multiplier}")
 
                         cum_sum += ((clf_prob_dist[node_id]-clf_prob_dist[node_id_parent])/
                                     (1 + (HS_lambda * lambda_multiplier) / node_samples[node_id_parent]))

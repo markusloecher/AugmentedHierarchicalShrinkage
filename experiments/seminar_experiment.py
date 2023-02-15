@@ -22,6 +22,7 @@ from TreeModelsFromScratch.RandomForest import RandomForest
 from TreeModelsFromScratch.datasets import DATASETS_CLASSIFICATION, DATASET_PATH
 from sklearn.model_selection import train_test_split
 from imodels import get_clean_dataset
+from sklearn.feature_selection import mutual_info_classif, mutual_info_regression
 
 ########################################################################################################################
 # [0.] Load the data ===================================================================================================
@@ -53,18 +54,42 @@ dt.fit(X_train, y_train)
 y_pred = dt.predict(X_test)                                         # predict class
 y_pred_prob = dt.predict_proba(X_test)                              # Predict probabilites for class membership
 roc_auc_performance = roc_auc_score(y_test, y_pred)                 # ROC AUC score on test set
-print(f"ROC-AUC performance regular: {roc_auc_performance}")
+
+mi_regular = mutual_info_classif(y_test.values.reshape(-1, 1), y_pred.reshape(-1, 1))
+print(f"ROC-AUC performance regular: {roc_auc_performance}, MI: {mi_regular}")
 
 ########################################################################################################################
-# [3.] Fit fancy DT model ==============================================================================================
-########################################################################################################################
-dt = DecisionTree(treetype='classification', HShrinkage=True, HS_lambda=100.0, random_state=42)
+# [3.] Fit DT model with HS *without* lambda_multiplier ================================================================
+# ######################################################################################################################
+HS_lambda = 100.0
+dt = DecisionTree(treetype='classification',
+                  HShrinkage=True,
+                  HS_lambda=HS_lambda,
+                  b_use_hs_lambda_multiplier=False,
+                  random_state=42)
 dt.fit(X_train, y_train)
 
 y_pred = dt.predict(X_test)                                         # predict class
 y_pred_prob = dt.predict_proba(X_test)                              # Predict probabilites for class membership
 roc_auc_performance = roc_auc_score(y_test, y_pred)                 # ROC AUC score on test set
-print(f"ROC-AUC performance mit fancy shrinkage: {roc_auc_performance}")
+mi_hs_only = mutual_info_classif(y_test.values.reshape(-1, 1), y_pred.reshape(-1, 1))
+print(f"ROC-AUC performance with HS *without* lambda_multiplier: {roc_auc_performance}, MI: {mi_hs_only}")
+
+########################################################################################################################
+# [3.] Fit DT model with HS *with* lambda_multiplier ================================================================
+# ######################################################################################################################
+dt = DecisionTree(treetype='classification',
+                  HShrinkage=True,
+                  HS_lambda=HS_lambda,
+                  b_use_hs_lambda_multiplier=True,
+                  random_state=42)
+dt.fit(X_train, y_train)
+
+y_pred = dt.predict(X_test)                                         # predict class
+y_pred_prob = dt.predict_proba(X_test)                              # Predict probabilites for class membership
+roc_auc_performance = roc_auc_score(y_test, y_pred)                 # ROC AUC score on test set
+mi_hs_lambda = mutual_info_classif(y_test.values.reshape(-1, 1), y_pred.reshape(-1, 1))
+print(f"ROC-AUC performance with HS *with* lambda_multiplier: {roc_auc_performance}, MI: {mi_hs_lambda}")
 
 ########################################################################################################################
 ########################################################################################################################
