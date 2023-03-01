@@ -22,7 +22,7 @@ def preprocess(df):
     return X_df, y_df
 
 
-def get_data(path="raw_data/titanic/titanic_train.csv"):
+def get_titanic(path="raw_data/titanic/titanic_train.csv"):
     # Load the data
     df = pd.read_csv(path)
 
