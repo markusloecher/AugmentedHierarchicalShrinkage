@@ -1,1 +1,1 @@
-from .aughs import AugHSTreeClassifier, AugHSTreeRegressor, AugHSForestClassifier, AugHSForestRegressor
+from .aughs import ShrinkageClassifier, ShrinkageRegressor
