@@ -55,7 +55,8 @@ def _shrink_tree_rec(dt, shrink_mode, lmb=0,
     else:
         # Normalize to probability vector
         value = deepcopy(dt.tree_.value[node, :, :] / dt.tree_.weighted_n_node_samples[node])
-
+        #print("Prob Vector")
+        #print(value)
     # cum_sum contains the value of the telescopic sum
     # If root: initialize cum_sum to the value of the root node
     if parent_node is None:
@@ -72,11 +73,11 @@ def _shrink_tree_rec(dt, shrink_mode, lmb=0,
                 # Note: we can just use the value_counts, scipy.stats.entropy
                 # handles normalization. i.e. it is not necessary to divide by
                 # the total number of samples
-                _, counts = np.unique(parent_split_feature, return_counts=True)
+                _, counts = np.unique(parent_split_feature, return_counts=True)         
                 entropy = scipy.stats.entropy(counts)
                 if shrink_mode =="beta":
-                    alpha = alpha + counts[0]
-                    beta = beta  + counts[1]
+                    alpha = alpha + value[0][0]*parent_num_samples
+                    beta = beta  + value[0][1]*parent_num_samples
                     BETA  = make_beta(alpha, beta)
                 if shrink_mode == "hs_entropy":
                     # Entropy-based shrinkage
@@ -90,13 +91,20 @@ def _shrink_tree_rec(dt, shrink_mode, lmb=0,
                 cardinality = len(np.unique(parent_split_feature))
                 reg = 1 + (lmb * np.log(cardinality) / parent_num_samples)
         cum_sum += (value - parent_val) / reg
-
+        
     # Set the value of the node to the value of the telescopic sum
     assert not np.isnan(cum_sum).any(), "Cumulative sum is NaN"
     dt.tree_.value[node, :, :] = cum_sum
+    #print("cum_sum")
+    #print(cum_sum)
+    if shrink_mode =="beta":
+        #print("BETA")
+        dt.tree_.value[node, :, :] = [alpha/(beta+alpha), beta/(beta+alpha)]
+        #print([alpha/(beta+alpha),beta/(beta+alpha)])
     # Update the impurity of the node
     dt.tree_.impurity[node] = 1 - np.sum(np.power(cum_sum, 2))
     assert not np.isnan(dt.tree_.impurity[node]), "Impurity is NaN"
+    
     # If not leaf: recurse
     if not (left == -1 and right == -1):
         X_train_left = deepcopy(X_train[X_train[:, feature] <= threshold])
@@ -104,11 +112,11 @@ def _shrink_tree_rec(dt, shrink_mode, lmb=0,
         _shrink_tree_rec(dt, shrink_mode, lmb, X_train_left, X_train, left,
                             node, value, deepcopy(cum_sum), alpha, beta)
         _shrink_tree_rec(dt, shrink_mode, lmb, X_train_right, X_train,
-                            right, node, value, deepcopy(cum_sum), alpha, beta)
+                            right, node, value, deepcopy(cum_sum), deepcopy(alpha), deepcopy(beta))
     
-    if shrink_mode =="beta":
-        print(alpha)
-        print(beta)
+    #if shrink_mode =="beta":
+        #print(alpha)
+        #print(beta)
 
 class ShrinkageEstimator(BaseEstimator):
     def __init__(self, base_estimator: BaseEstimator = None,
