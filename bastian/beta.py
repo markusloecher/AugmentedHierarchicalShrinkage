@@ -110,7 +110,7 @@ def _shrink_tree_rec(dt, shrink_mode, lmb=0,
         X_train_left = deepcopy(X_train[X_train[:, feature] <= threshold])
         X_train_right = deepcopy(X_train[X_train[:, feature] > threshold])
         _shrink_tree_rec(dt, shrink_mode, lmb, X_train_left, X_train, left,
-                            node, value, deepcopy(cum_sum), alpha, beta)
+                            node, value, deepcopy(cum_sum), deepcopy(alpha), deepcopy(beta))
         _shrink_tree_rec(dt, shrink_mode, lmb, X_train_right, X_train,
                             right, node, value, deepcopy(cum_sum), deepcopy(alpha), deepcopy(beta))
     
