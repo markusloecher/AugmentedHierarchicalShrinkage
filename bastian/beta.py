@@ -35,28 +35,30 @@ def _check_fit_arguments(X, y, feature_names) -> Tuple[npt.NDArray, npt.NDArray,
     return X, y, feature_names
 
 
-def _shrink_tree_rec(dt, shrink_mode, lmb=0,
+def _shrink_tree_rec(dt, shrink_mode, lmb=0, alpha=1, beta=1,
                      X_train=None,
                      X_train_parent=None,
-                     node=0, parent_node=None, parent_val=None, cum_sum=None, alpha=1, beta=1):
+                     node=0, parent_node=None, parent_val=None, cum_sum=None):
     """
     Go through the tree and shrink contributions recursively
     Don't call this function directly, use shrink_forest or shrink_tree
     """
 
+    #print(alpha)
+    #print(beta)
+    #return(0)
     left = dt.tree_.children_left[node]
     right = dt.tree_.children_right[node]
     feature = dt.tree_.feature[node]
     threshold = dt.tree_.threshold[node]
     parent_num_samples = dt.tree_.n_node_samples[parent_node]
+    node_num_samples = dt.tree_.n_node_samples[node]
     parent_feature = dt.tree_.feature[parent_node]
     if isinstance(dt, RegressorMixin):
         value = dt.tree_.value[node, :, :]
     else:
         # Normalize to probability vector
-        value = deepcopy(dt.tree_.value[node, :, :] / dt.tree_.weighted_n_node_samples[node])
-        #print("Prob Vector")
-        #print(value)
+        value = deepcopy(dt.tree_.value[node, :, :]/ dt.tree_.weighted_n_node_samples[node])
     # cum_sum contains the value of the telescopic sum
     # If root: initialize cum_sum to the value of the root node
     if parent_node is None:
@@ -76,8 +78,8 @@ def _shrink_tree_rec(dt, shrink_mode, lmb=0,
                 _, counts = np.unique(parent_split_feature, return_counts=True)         
                 entropy = scipy.stats.entropy(counts)
                 if shrink_mode =="beta":
-                    alpha = alpha + value[0][0]*parent_num_samples
-                    beta = beta  + value[0][1]*parent_num_samples
+                    alpha = alpha + value[0][0] #* parent_num_samples 
+                    beta = beta + value[0][1] #* parent_num_samples 
                     BETA  = make_beta(alpha, beta)
                 if shrink_mode == "hs_entropy":
                     # Entropy-based shrinkage
@@ -95,12 +97,8 @@ def _shrink_tree_rec(dt, shrink_mode, lmb=0,
     # Set the value of the node to the value of the telescopic sum
     assert not np.isnan(cum_sum).any(), "Cumulative sum is NaN"
     dt.tree_.value[node, :, :] = cum_sum
-    #print("cum_sum")
-    #print(cum_sum)
     if shrink_mode =="beta":
-        #print("BETA")
-        dt.tree_.value[node, :, :] = [alpha/(beta+alpha), beta/(beta+alpha)]
-        #print([alpha/(beta+alpha),beta/(beta+alpha)])
+        dt.tree_.value[node, :, :] = [alpha, beta] #[alpha/(beta+alpha), beta/(beta+alpha)]
     # Update the impurity of the node
     dt.tree_.impurity[node] = 1 - np.sum(np.power(cum_sum, 2))
     assert not np.isnan(dt.tree_.impurity[node]), "Impurity is NaN"
@@ -109,23 +107,21 @@ def _shrink_tree_rec(dt, shrink_mode, lmb=0,
     if not (left == -1 and right == -1):
         X_train_left = deepcopy(X_train[X_train[:, feature] <= threshold])
         X_train_right = deepcopy(X_train[X_train[:, feature] > threshold])
-        _shrink_tree_rec(dt, shrink_mode, lmb, X_train_left, X_train, left,
-                            node, value, deepcopy(cum_sum), deepcopy(alpha), deepcopy(beta))
-        _shrink_tree_rec(dt, shrink_mode, lmb, X_train_right, X_train,
-                            right, node, value, deepcopy(cum_sum), deepcopy(alpha), deepcopy(beta))
-    
-    #if shrink_mode =="beta":
-        #print(alpha)
-        #print(beta)
+        _shrink_tree_rec(dt, shrink_mode, lmb, deepcopy(alpha), deepcopy(beta), X_train_left, X_train, left,
+                            node, value, deepcopy(cum_sum))
+        _shrink_tree_rec(dt, shrink_mode, lmb, deepcopy(alpha), deepcopy(beta), X_train_right, X_train,
+                            right, node, value, deepcopy(cum_sum))
 
 class ShrinkageEstimator(BaseEstimator):
     def __init__(self, base_estimator: BaseEstimator = None,
-                 shrink_mode: str = "hs", lmb: float = 1,
+                 shrink_mode: str = "hs", lmb: float = 1, alpha: float=1, beta: float=1,
                  random_state=None):
         self.base_estimator = base_estimator
         self.shrink_mode = shrink_mode
         self.lmb = lmb
         self.random_state = random_state
+        self.alpha = alpha
+        self.beta = beta
     
     @abstractmethod
     def get_default_estimator(self):
@@ -149,10 +145,9 @@ class ShrinkageEstimator(BaseEstimator):
     def shrink(self, X):
         if hasattr(self.estimator_, "estimators_"):  # Random Forest
             for estimator in self.estimator_.estimators_:
-                print("new estimator")
-                _shrink_tree_rec(estimator, self.shrink_mode, self.lmb, X)
+                _shrink_tree_rec(estimator, self.shrink_mode, self.lmb, self.alpha, self.beta, X)
         else:  # Single tree
-            _shrink_tree_rec(self.estimator_, self.shrink_mode, self.lmb, X)
+            _shrink_tree_rec(self.estimator_, self.shrink_mode, self.lmb, self.alpha, self.beta, X)
 
     def _validate_arguments(self, X, y, feature_names):
         if self.shrink_mode not in ["hs", "hs_entropy", "hs_entropy_2",
