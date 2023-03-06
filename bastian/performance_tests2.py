@@ -21,7 +21,7 @@ lmbs = np.arange(0, 50, 1)
 for ds_name, id, source in clf_datasets:
     X, y, feature_names = get_clean_dataset(id, data_source=source)
     scores = {}
-    
+    print(ds_name)
     #for shrink_mode in ["hs", "hs_entropy", "hs_entropy_2", "hs_log_cardinality"]:
     #    scores[shrink_mode] = []
     #    for lmb in lmbs:
@@ -48,6 +48,59 @@ for ds_name, id, source in clf_datasets:
         scores[shrink_mode].append(cross_val_score(clf, X, y, cv=10, n_jobs=-1,
             scoring="balanced_accuracy").mean())    
     
+    # hs_entropy
+    shrink_mode="hs_entropy"
+    scores[shrink_mode] = []
+    param_grid = {
+    "lmb": [1, 10, 50, 100, 200, 500],
+    "shrink_mode": ["hs_entropy"]}
+
+    grid_search = GridSearchCV(ShrinkageClassifier(), param_grid, cv=5, n_jobs=-1)
+    grid_search.fit(X, y)
+    best_params = grid_search.best_params_
+    print(best_params)
+
+    for lmb in lmbs:
+        clf = ShrinkageClassifier(shrink_mode=shrink_mode, lmb=best_params.get('lmb'))
+        #print(clf)
+        scores[shrink_mode].append(cross_val_score(clf, X, y, cv=10, n_jobs=-1,
+            scoring="balanced_accuracy").mean())    
+    
+    # hs_entropy_2
+    shrink_mode="hs_entropy_2"
+    scores[shrink_mode] = []
+    param_grid = {
+    "lmb": [1, 10, 50, 100, 200, 500],
+    "shrink_mode": ["hs_entropy_2"]}
+
+    grid_search = GridSearchCV(ShrinkageClassifier(), param_grid, cv=5, n_jobs=-1)
+    grid_search.fit(X, y)
+    best_params = grid_search.best_params_
+    print(best_params)
+
+    for lmb in lmbs:
+        clf = ShrinkageClassifier(shrink_mode=shrink_mode, lmb=best_params.get('lmb'))
+        #print(clf)
+        scores[shrink_mode].append(cross_val_score(clf, X, y, cv=10, n_jobs=-1,
+            scoring="balanced_accuracy").mean())    
+    
+    # hs_log_cardinality
+    shrink_mode="hs_log_cardinality"
+    scores[shrink_mode] = []
+    param_grid = {
+    "lmb": [1, 10, 50, 100, 200, 500],
+    "shrink_mode": ["hs_log_cardinality"]}
+
+    grid_search = GridSearchCV(ShrinkageClassifier(), param_grid, cv=5, n_jobs=-1)
+    grid_search.fit(X, y)
+    best_params = grid_search.best_params_
+    print(best_params)
+
+    for lmb in lmbs:
+        clf = ShrinkageClassifier(shrink_mode=shrink_mode, lmb=best_params.get('lmb'))
+        #print(clf)
+        scores[shrink_mode].append(cross_val_score(clf, X, y, cv=10, n_jobs=-1,
+            scoring="balanced_accuracy").mean())    
 
     # beta
     shrink_mode="beta"
@@ -75,16 +128,16 @@ for ds_name, id, source in clf_datasets:
     
     import numpy as np
     fig, ax = plt.subplots()
-    data = list([scores['hs'], scores['beta']])
+    data = list([scores['hs'], scores['hs_entropy'], scores['hs_entropy_2'], scores['hs_log_cardinality'], scores['beta']])
     # basic plot
-    ax.boxplot(data)
+    ax.boxplot(data, notch=True)
 
     ax.set_title(ds_name)
     ax.set_xlabel('')
     ax.set_ylabel('Balanced Accuracy')
-    xticklabels=['hs', 'beta']
+    xticklabels=['hs', 'hs_entropy', 'hs_entropy_2', 'hs_log_cardinality', 'beta']
     ax.set_xticklabels(xticklabels)
-
+    plt.xticks(fontsize=7)#, rotation=45)
     # add horizontal grid lines
     #ax.yaxis.grid(True)
 
