@@ -7,6 +7,7 @@ import scipy
 from numpy import typing as npt
 from sklearn.base import BaseEstimator, ClassifierMixin, RegressorMixin, clone
 from sklearn.tree import DecisionTreeClassifier, DecisionTreeRegressor
+from sklearn.ensemble import RandomForestClassifier
 from sklearn.utils.validation import check_X_y, check_is_fitted
 from sklearn.utils.estimator_checks import check_estimator
 
@@ -44,9 +45,6 @@ def _shrink_tree_rec(dt, shrink_mode, lmb=0, alpha=1, beta=1,
     Don't call this function directly, use shrink_forest or shrink_tree
     """
 
-    #print(alpha)
-    #print(beta)
-    #return(0)
     left = dt.tree_.children_left[node]
     right = dt.tree_.children_right[node]
     feature = dt.tree_.feature[node]
@@ -58,11 +56,17 @@ def _shrink_tree_rec(dt, shrink_mode, lmb=0, alpha=1, beta=1,
         value = dt.tree_.value[node, :, :]
     else:
         # Normalize to probability vector
-        value = deepcopy(dt.tree_.value[node, :, :]/ dt.tree_.weighted_n_node_samples[node])
+        if shrink_mode =="beta":
+            value = deepcopy(dt.tree_.value[node, :, :])  
+        else:
+            value = deepcopy(dt.tree_.value[node, :, :]/ dt.tree_.weighted_n_node_samples[node])
+        
     # cum_sum contains the value of the telescopic sum
     # If root: initialize cum_sum to the value of the root node
     if parent_node is None:
         cum_sum = value
+        alpha = alpha 
+        beta = beta 
     else:
         # If not root: update cum_sum based on the value of the current node and the parent node
         reg = 1
@@ -78,8 +82,8 @@ def _shrink_tree_rec(dt, shrink_mode, lmb=0, alpha=1, beta=1,
                 _, counts = np.unique(parent_split_feature, return_counts=True)         
                 entropy = scipy.stats.entropy(counts)
                 if shrink_mode =="beta":
-                    alpha = alpha + value[0][0] #* parent_num_samples 
-                    beta = beta + value[0][1] #* parent_num_samples 
+                    alpha = alpha + (value[0][0]) 
+                    beta = beta + (value[0][1])   
                     BETA  = make_beta(alpha, beta)
                 if shrink_mode == "hs_entropy":
                     # Entropy-based shrinkage
@@ -98,7 +102,7 @@ def _shrink_tree_rec(dt, shrink_mode, lmb=0, alpha=1, beta=1,
     assert not np.isnan(cum_sum).any(), "Cumulative sum is NaN"
     dt.tree_.value[node, :, :] = cum_sum
     if shrink_mode =="beta":
-        dt.tree_.value[node, :, :] = [alpha, beta] #[alpha/(beta+alpha), beta/(beta+alpha)]
+        dt.tree_.value[node, :, :] = [alpha, beta] 
     # Update the impurity of the node
     dt.tree_.impurity[node] = 1 - np.sum(np.power(cum_sum, 2))
     assert not np.isnan(dt.tree_.impurity[node]), "Impurity is NaN"
@@ -108,9 +112,12 @@ def _shrink_tree_rec(dt, shrink_mode, lmb=0, alpha=1, beta=1,
         X_train_left = deepcopy(X_train[X_train[:, feature] <= threshold])
         X_train_right = deepcopy(X_train[X_train[:, feature] > threshold])
         _shrink_tree_rec(dt, shrink_mode, lmb, deepcopy(alpha), deepcopy(beta), X_train_left, X_train, left,
-                            node, value, deepcopy(cum_sum))
+                            node, value, deepcopy(dt.tree_.value[node, :, :]))
         _shrink_tree_rec(dt, shrink_mode, lmb, deepcopy(alpha), deepcopy(beta), X_train_right, X_train,
-                            right, node, value, deepcopy(cum_sum))
+                            right, node, value, deepcopy(dt.tree_.value[node, :, :]))
+    else:
+        if shrink_mode == 'beta':
+            dt.tree_.value[node, :, :] = [alpha/(beta+alpha), beta/(beta+alpha)]
 
 class ShrinkageEstimator(BaseEstimator):
     def __init__(self, base_estimator: BaseEstimator = None,
@@ -170,7 +177,7 @@ class ShrinkageEstimator(BaseEstimator):
 
 class ShrinkageClassifier(ShrinkageEstimator, ClassifierMixin):
     def get_default_estimator(self):
-        return DecisionTreeClassifier()
+        return RandomForestClassifier(n_estimators=10) #DecisionTreeClassifier() #
 
     def fit(self, X, y, **kwargs):
         super().fit(X, y, **kwargs)
