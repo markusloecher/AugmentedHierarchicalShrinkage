@@ -84,7 +84,7 @@ def _shrink_tree_rec(dt, shrink_mode, lmb=0, alpha=1, beta=1,
                 if shrink_mode =="beta":
                     alpha = alpha + (value[0][0]) 
                     beta = beta + (value[0][1])   
-                    BETA  = make_beta(alpha, beta)
+                    #BETA  = make_beta(alpha, beta)
                 if shrink_mode == "hs_entropy":
                     # Entropy-based shrinkage
                     reg = 1 + (lmb * entropy / parent_num_samples)
@@ -112,9 +112,9 @@ def _shrink_tree_rec(dt, shrink_mode, lmb=0, alpha=1, beta=1,
         X_train_left = deepcopy(X_train[X_train[:, feature] <= threshold])
         X_train_right = deepcopy(X_train[X_train[:, feature] > threshold])
         _shrink_tree_rec(dt, shrink_mode, lmb, deepcopy(alpha), deepcopy(beta), X_train_left, X_train, left,
-                            node, value, deepcopy(dt.tree_.value[node, :, :]))
+                            node, value, deepcopy(cum_sum))
         _shrink_tree_rec(dt, shrink_mode, lmb, deepcopy(alpha), deepcopy(beta), X_train_right, X_train,
-                            right, node, value, deepcopy(dt.tree_.value[node, :, :]))
+                            right, node, value, deepcopy(cum_sum))
     else:
         if shrink_mode == 'beta':
             dt.tree_.value[node, :, :] = [alpha/(beta+alpha), beta/(beta+alpha)]
@@ -177,7 +177,7 @@ class ShrinkageEstimator(BaseEstimator):
 
 class ShrinkageClassifier(ShrinkageEstimator, ClassifierMixin):
     def get_default_estimator(self):
-        return RandomForestClassifier(n_estimators=10) #DecisionTreeClassifier() #
+        return DecisionTreeClassifier() #RandomForestClassifier(n_estimators=10) # #
 
     def fit(self, X, y, **kwargs):
         super().fit(X, y, **kwargs)
