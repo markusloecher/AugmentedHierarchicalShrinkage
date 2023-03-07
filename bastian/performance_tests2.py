@@ -18,6 +18,8 @@ clf_datasets = [
     ("recidivism", "compas_two_year_clean", "imodels")
 ]
 
+# scoring
+sc = "balanced_accuracy"
 
 lmbs = np.arange(0, 100, 1)
 for ds_name, id, source in clf_datasets:
@@ -36,10 +38,10 @@ for ds_name, id, source in clf_datasets:
     shrink_mode="vanilla"
     scores[shrink_mode] = []
     for lmb in lmbs:
-        clf = DecisionTreeClassifier() #RandomForestClassifier(n_estimators=200) ##
+        clf = DecisionTreeClassifier() #RandomForestClassifier(n_estimators=3) ## 
         #print(clf)
         scores[shrink_mode].append(cross_val_score(clf, X, y, cv=10, n_jobs=-1,
-            scoring="balanced_accuracy").mean())    
+            scoring=sc).mean())    
     print("Vanilla")
 
     # hs
@@ -58,7 +60,7 @@ for ds_name, id, source in clf_datasets:
         clf = ShrinkageClassifier(shrink_mode=shrink_mode, lmb=best_params.get('lmb'))
         #print(clf)
         scores[shrink_mode].append(cross_val_score(clf, X, y, cv=10, n_jobs=-1,
-            scoring="balanced_accuracy").mean())    
+            scoring=sc).mean())    
     
     # hs_entropy
     shrink_mode="hs_entropy"
@@ -76,7 +78,7 @@ for ds_name, id, source in clf_datasets:
         clf = ShrinkageClassifier(shrink_mode=shrink_mode, lmb=best_params.get('lmb'))
         #print(clf)
         scores[shrink_mode].append(cross_val_score(clf, X, y, cv=10, n_jobs=-1,
-            scoring="balanced_accuracy").mean())    
+            scoring=sc).mean())    
     
     # hs_entropy_2
     shrink_mode="hs_entropy_2"
@@ -94,7 +96,7 @@ for ds_name, id, source in clf_datasets:
         clf = ShrinkageClassifier(shrink_mode=shrink_mode, lmb=best_params.get('lmb'))
         #print(clf)
         scores[shrink_mode].append(cross_val_score(clf, X, y, cv=10, n_jobs=-1,
-            scoring="balanced_accuracy").mean())    
+            scoring=sc).mean())    
     
     # hs_log_cardinality
     shrink_mode="hs_log_cardinality"
@@ -112,7 +114,7 @@ for ds_name, id, source in clf_datasets:
         clf = ShrinkageClassifier(shrink_mode=shrink_mode, lmb=best_params.get('lmb'))
         #print(clf)
         scores[shrink_mode].append(cross_val_score(clf, X, y, cv=10, n_jobs=-1,
-            scoring="balanced_accuracy").mean())    
+            scoring=sc).mean())    
 
     # beta
     shrink_mode="beta"
@@ -131,7 +133,7 @@ for ds_name, id, source in clf_datasets:
         clf = ShrinkageClassifier(shrink_mode=shrink_mode, alpha=best_params.get('alpha'),beta=best_params.get('beta'))
         #print(clf)
         scores[shrink_mode].append(cross_val_score(clf, X, y, cv=10, n_jobs=-1,
-            scoring="balanced_accuracy").mean())    
+            scoring=sc).mean())    
     
     #print(scores)
     #for key in scores:
