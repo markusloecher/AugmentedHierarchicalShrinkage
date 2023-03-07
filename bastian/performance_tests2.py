@@ -38,7 +38,7 @@ for ds_name, id, source in clf_datasets:
     shrink_mode="vanilla"
     scores[shrink_mode] = []
     for lmb in lmbs:
-        clf = DecisionTreeClassifier() #RandomForestClassifier(n_estimators=3) ## 
+        clf = RandomForestClassifier(n_estimators=5) ## DecisionTreeClassifier() #
         #print(clf)
         scores[shrink_mode].append(cross_val_score(clf, X, y, cv=10, n_jobs=-1,
             scoring=sc).mean())    
@@ -48,10 +48,10 @@ for ds_name, id, source in clf_datasets:
     shrink_mode="hs"
     scores[shrink_mode] = []
     param_grid = {
-    "lmb": [1, 10, 50, 100, 200, 500],
+    "lmb": [0.1, 1, 10, 25, 50, 100],
     "shrink_mode": ["hs"]}
 
-    grid_search = GridSearchCV(ShrinkageClassifier(), param_grid, cv=5, n_jobs=-1)
+    grid_search = GridSearchCV(ShrinkageClassifier(), param_grid, cv=5, n_jobs=-1, scoring=sc)
     grid_search.fit(X, y)
     best_params = grid_search.best_params_
     print(best_params)
@@ -59,17 +59,17 @@ for ds_name, id, source in clf_datasets:
     for lmb in lmbs:
         clf = ShrinkageClassifier(shrink_mode=shrink_mode, lmb=best_params.get('lmb'))
         #print(clf)
-        scores[shrink_mode].append(cross_val_score(clf, X, y, cv=10, n_jobs=-1,
+        scores[shrink_mode].append(cross_val_score(clf, X, y, cv=10, n_jobs=-1, 
             scoring=sc).mean())    
     
     # hs_entropy
     shrink_mode="hs_entropy"
     scores[shrink_mode] = []
     param_grid = {
-    "lmb": [1, 10, 50, 100, 200, 500],
+    "lmb": [0.1, 1, 10, 25, 50, 100],
     "shrink_mode": ["hs_entropy"]}
 
-    grid_search = GridSearchCV(ShrinkageClassifier(), param_grid, cv=5, n_jobs=-1)
+    grid_search = GridSearchCV(ShrinkageClassifier(), param_grid, cv=5, n_jobs=-1, scoring=sc)
     grid_search.fit(X, y)
     best_params = grid_search.best_params_
     print(best_params)
@@ -84,10 +84,10 @@ for ds_name, id, source in clf_datasets:
     shrink_mode="hs_entropy_2"
     scores[shrink_mode] = []
     param_grid = {
-    "lmb": [1, 10, 50, 100, 200, 500],
+    "lmb": [0.1, 1, 10, 25, 50, 100],
     "shrink_mode": ["hs_entropy_2"]}
 
-    grid_search = GridSearchCV(ShrinkageClassifier(), param_grid, cv=5, n_jobs=-1)
+    grid_search = GridSearchCV(ShrinkageClassifier(), param_grid, cv=5, n_jobs=-1, scoring=sc)
     grid_search.fit(X, y)
     best_params = grid_search.best_params_
     print(best_params)
@@ -102,10 +102,10 @@ for ds_name, id, source in clf_datasets:
     shrink_mode="hs_log_cardinality"
     scores[shrink_mode] = []
     param_grid = {
-    "lmb": [1, 10, 50, 100, 200, 500],
+    "lmb": [0.1, 1, 10, 25, 50, 100],
     "shrink_mode": ["hs_log_cardinality"]}
 
-    grid_search = GridSearchCV(ShrinkageClassifier(), param_grid, cv=5, n_jobs=-1)
+    grid_search = GridSearchCV(ShrinkageClassifier(), param_grid, cv=5, n_jobs=-1, scoring=sc)
     grid_search.fit(X, y)
     best_params = grid_search.best_params_
     print(best_params)
@@ -120,11 +120,11 @@ for ds_name, id, source in clf_datasets:
     shrink_mode="beta"
     scores[shrink_mode] = []
     param_grid = {
-    "alpha": [1, 10, 50, 100, 200, 500],
-    "beta":[1, 10, 50, 100, 200, 500],
+    "alpha": [0.01, 0.1, 1, 10, 25, 50, 100, 200, 500],
+    "beta":[0.01, 0.1, 1, 10, 25, 50, 100, 200, 500],
     "shrink_mode": ["beta"]}
 
-    grid_search = GridSearchCV(ShrinkageClassifier(), param_grid, cv=5, n_jobs=-1)
+    grid_search = GridSearchCV(ShrinkageClassifier(), param_grid, cv=5, n_jobs=-1, scoring=sc)
     grid_search.fit(X, y)
 
     best_params = grid_search.best_params_
