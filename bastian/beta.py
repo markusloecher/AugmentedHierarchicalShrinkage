@@ -82,6 +82,7 @@ def _shrink_tree_rec(dt, shrink_mode, lmb=0, alpha=1, beta=1,
                 _, counts = np.unique(parent_split_feature, return_counts=True)         
                 entropy = scipy.stats.entropy(counts)
                 if shrink_mode =="beta":
+                   # print(dt.tree_.impurity[node])
                     alpha = alpha + (value[0][0]) 
                     beta = beta + (value[0][1])   
                     #BETA  = make_beta(alpha, beta)
@@ -104,7 +105,7 @@ def _shrink_tree_rec(dt, shrink_mode, lmb=0, alpha=1, beta=1,
     if shrink_mode =="beta":
         dt.tree_.value[node, :, :] = [alpha, beta] 
     # Update the impurity of the node
-    dt.tree_.impurity[node] = 1 - np.sum(np.power(cum_sum, 2))
+    # dt.tree_.impurity[node] = 1 - np.sum(np.power(cum_sum, 2))
     assert not np.isnan(dt.tree_.impurity[node]), "Impurity is NaN"
     
     # If not leaf: recurse
@@ -117,8 +118,10 @@ def _shrink_tree_rec(dt, shrink_mode, lmb=0, alpha=1, beta=1,
                             right, node, value, deepcopy(cum_sum))
     else:
         if shrink_mode == 'beta':
-            dt.tree_.value[node, :, :] = [alpha/(beta+alpha), beta/(beta+alpha)]
-
+            #dt.tree_.value[node, :, :] = [alpha/(beta+alpha), beta/(beta+alpha)]
+            dd = np.random.beta(alpha, beta, size=1)[0]
+            dt.tree_.value[node, :, :] = [dd, 1-dd]
+           
 class ShrinkageEstimator(BaseEstimator):
     def __init__(self, base_estimator: BaseEstimator = None,
                  shrink_mode: str = "hs", lmb: float = 1, alpha: float=1, beta: float=1,
@@ -177,7 +180,7 @@ class ShrinkageEstimator(BaseEstimator):
 
 class ShrinkageClassifier(ShrinkageEstimator, ClassifierMixin):
     def get_default_estimator(self):
-        return DecisionTreeClassifier() #RandomForestClassifier(n_estimators=10) # #
+        return DecisionTreeClassifier() #RandomForestClassifier(n_estimators=200) ## # # #
 
     def fit(self, X, y, **kwargs):
         super().fit(X, y, **kwargs)
