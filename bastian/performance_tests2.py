@@ -4,6 +4,8 @@ from beta import ShrinkageClassifier
 from sklearn.model_selection import cross_val_score
 import matplotlib.pyplot as plt
 from sklearn.model_selection import GridSearchCV
+from sklearn.tree import DecisionTreeClassifier, DecisionTreeRegressor
+from sklearn.ensemble import RandomForestClassifier
 
 clf_datasets = [
     ("heart", "heart", "imodels"),
@@ -17,7 +19,7 @@ clf_datasets = [
 ]
 
 
-lmbs = np.arange(0, 50, 1)
+lmbs = np.arange(0, 100, 1)
 for ds_name, id, source in clf_datasets:
     X, y, feature_names = get_clean_dataset(id, data_source=source)
     scores = {}
@@ -29,6 +31,16 @@ for ds_name, id, source in clf_datasets:
     #        scores[shrink_mode].append(
     #            cross_val_score(clf, X, y, cv=10, n_jobs=-1,
     #                            scoring="balanced_accuracy").mean())        
+
+    # vanilla
+    shrink_mode="vanilla"
+    scores[shrink_mode] = []
+    for lmb in lmbs:
+        clf = DecisionTreeClassifier() #RandomForestClassifier(n_estimators=200) ##
+        #print(clf)
+        scores[shrink_mode].append(cross_val_score(clf, X, y, cv=10, n_jobs=-1,
+            scoring="balanced_accuracy").mean())    
+    print("Vanilla")
 
     # hs
     shrink_mode="hs"
@@ -128,14 +140,14 @@ for ds_name, id, source in clf_datasets:
     
     import numpy as np
     fig, ax = plt.subplots()
-    data = list([scores['hs'], scores['hs_entropy'], scores['hs_entropy_2'], scores['hs_log_cardinality'], scores['beta']])
+    data = list([scores['vanilla'], scores['hs'], scores['hs_entropy'], scores['hs_entropy_2'], scores['hs_log_cardinality'], scores['beta']])
     # basic plot
     ax.boxplot(data, notch=True)
 
     ax.set_title(ds_name)
     ax.set_xlabel('')
     ax.set_ylabel('Balanced Accuracy')
-    xticklabels=['hs', 'hs_entropy', 'hs_entropy_2', 'hs_log_cardinality', 'beta']
+    xticklabels=['vanilla','hs', 'hs_entropy', 'hs_entropy_2', 'hs_log_cardinality', 'beta']
     ax.set_xticklabels(xticklabels)
     plt.xticks(fontsize=7)#, rotation=45)
     # add horizontal grid lines
