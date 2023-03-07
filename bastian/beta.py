@@ -84,7 +84,7 @@ def _shrink_tree_rec(dt, shrink_mode, lmb=0, alpha=1, beta=1,
                 if shrink_mode =="beta":
                    # print(dt.tree_.impurity[node])
                     alpha = alpha + value[0][0] 
-                    beta = beta + value[0][1]   
+                    beta = beta + value[0][1] 
                     #BETA  = make_beta(alpha, beta)
                 if shrink_mode == "hs_entropy":
                     # Entropy-based shrinkage
@@ -119,8 +119,6 @@ def _shrink_tree_rec(dt, shrink_mode, lmb=0, alpha=1, beta=1,
     else:
         if shrink_mode == 'beta':
             dt.tree_.value[node, :, :] = [alpha/(beta+alpha), beta/(beta+alpha)]
-            #dd = np.median(np.random.beta(alpha, beta, size=100))
-            #dt.tree_.value[node, :, :] = [dd, 1-dd]
            
 class ShrinkageEstimator(BaseEstimator):
     def __init__(self, base_estimator: BaseEstimator = None,
@@ -180,7 +178,7 @@ class ShrinkageEstimator(BaseEstimator):
 
 class ShrinkageClassifier(ShrinkageEstimator, ClassifierMixin):
     def get_default_estimator(self):
-        return DecisionTreeClassifier()# RandomForestClassifier(n_estimators=3) # ### # # #
+        return RandomForestClassifier(n_estimators=5) # DecisionTreeClassifier()# ### # # #
 
     def fit(self, X, y, **kwargs):
         super().fit(X, y, **kwargs)
