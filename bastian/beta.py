@@ -178,7 +178,7 @@ class ShrinkageEstimator(BaseEstimator):
 
 class ShrinkageClassifier(ShrinkageEstimator, ClassifierMixin):
     def get_default_estimator(self):
-        return RandomForestClassifier(n_estimators=5) # DecisionTreeClassifier()# ### # # #
+        return RandomForestClassifier(n_estimators=10) # DecisionTreeClassifier()# ### # # #
 
     def fit(self, X, y, **kwargs):
         super().fit(X, y, **kwargs)
