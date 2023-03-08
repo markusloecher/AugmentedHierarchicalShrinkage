@@ -48,7 +48,7 @@ for ds_name, id, source in clf_datasets:
     shrink_mode="hs"
     scores[shrink_mode] = []
     param_grid = {
-    "lmb": [0.1, 1, 10, 25, 50, 100],
+    "lmb": [0.01, 0.1, 1, 10, 25, 50, 100],
     "shrink_mode": ["hs"]}
 
     grid_search = GridSearchCV(ShrinkageClassifier(), param_grid, cv=5, n_jobs=-1, scoring=sc)
@@ -66,7 +66,7 @@ for ds_name, id, source in clf_datasets:
     shrink_mode="hs_entropy"
     scores[shrink_mode] = []
     param_grid = {
-    "lmb": [0.1, 1, 10, 25, 50, 100],
+    "lmb": [0.01, 0.1, 1, 10, 25, 50, 100],
     "shrink_mode": ["hs_entropy"]}
 
     grid_search = GridSearchCV(ShrinkageClassifier(), param_grid, cv=5, n_jobs=-1, scoring=sc)
@@ -84,7 +84,7 @@ for ds_name, id, source in clf_datasets:
     shrink_mode="hs_entropy_2"
     scores[shrink_mode] = []
     param_grid = {
-    "lmb": [0.1, 1, 10, 25, 50, 100],
+    "lmb": [0.01, 0.1, 1, 10, 25, 50, 100],
     "shrink_mode": ["hs_entropy_2"]}
 
     grid_search = GridSearchCV(ShrinkageClassifier(), param_grid, cv=5, n_jobs=-1, scoring=sc)
@@ -102,7 +102,7 @@ for ds_name, id, source in clf_datasets:
     shrink_mode="hs_log_cardinality"
     scores[shrink_mode] = []
     param_grid = {
-    "lmb": [0.1, 1, 10, 25, 50, 100],
+    "lmb": [0.01, 0.1, 1, 10, 25, 50, 100],
     "shrink_mode": ["hs_log_cardinality"]}
 
     grid_search = GridSearchCV(ShrinkageClassifier(), param_grid, cv=5, n_jobs=-1, scoring=sc)
@@ -120,8 +120,8 @@ for ds_name, id, source in clf_datasets:
     shrink_mode="beta"
     scores[shrink_mode] = []
     param_grid = {
-    "alpha": [0.01, 0.1, 1, 10, 25, 50, 100, 200, 500],
-    "beta":[0.01, 0.1, 1, 10, 25, 50, 100, 200, 500],
+    "alpha": [-500, -200, -100, -50, -10 , 1, 10 , 50, 100, 200, 500],
+    "beta":[-500,-200, -100, -50, -10 , 1, 10 , 50, 100, 200, 500],
     "shrink_mode": ["beta"]}
 
     grid_search = GridSearchCV(ShrinkageClassifier(), param_grid, cv=5, n_jobs=-1, scoring=sc)
