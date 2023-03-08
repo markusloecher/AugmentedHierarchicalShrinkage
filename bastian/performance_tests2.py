@@ -38,7 +38,7 @@ for ds_name, id, source in clf_datasets:
     shrink_mode="vanilla"
     scores[shrink_mode] = []
     for lmb in lmbs:
-        clf = RandomForestClassifier(n_estimators=5) ## DecisionTreeClassifier() #
+        clf = RandomForestClassifier(n_estimators=10) ## DecisionTreeClassifier() #
         #print(clf)
         scores[shrink_mode].append(cross_val_score(clf, X, y, cv=10, n_jobs=-1,
             scoring=sc).mean())    
