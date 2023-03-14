@@ -17,7 +17,7 @@ Both versions of AugHS are enclosed in the self-developed python module `TreeMod
 2. Change the current working directory to the location where you want the cloned directory
 3. Clone the repository using
 ```bash
-git clone git@github.com:Heity94/AugmentedHierarchicalShrinkage.git
+git clone git@github.com:markusloecher/AugmentedHierarchicalShrinkage.git
 ```
 4. Change into the cloned directory
 ```bash
