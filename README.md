@@ -33,6 +33,13 @@ pyenv virtualenv aug_hs_env
 ```bash
 pyenv local aug_hs_env
 ```
+
+Alternatively:
+```bash
+python -m virtualenv aug_hs_env
+source aug_hs_env/bin/activate
+ ```
+ 
 From now on, all the commands that you run in this directory (or in any sub directory) will be using `aug_hs_env` virtual env.
 
 ### Install the package
