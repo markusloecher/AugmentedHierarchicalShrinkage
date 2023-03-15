@@ -11,6 +11,7 @@ def preprocess(df):
 
     # Ordinal encode categorical columns
     df[categorical_columns] = OrdinalEncoder().fit_transform(df[categorical_columns])
+    df = df.loc[:, feat_columns + ["Survived"]]
 
     # Impute/drop missing values
     df.loc[:, "Age"].fillna(df["Age"].mean(), inplace=True)

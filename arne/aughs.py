@@ -9,6 +9,9 @@ from sklearn.base import BaseEstimator, ClassifierMixin, RegressorMixin, clone
 from sklearn.tree import DecisionTreeClassifier, DecisionTreeRegressor
 from sklearn.utils.validation import check_X_y, check_is_fitted
 from sklearn.utils.estimator_checks import check_estimator
+from sklearn.model_selection import KFold
+from sklearn.metrics import mean_squared_error, balanced_accuracy_score
+from joblib import Parallel, delayed
 
 
 def _check_fit_arguments(X, y, feature_names) -> Tuple[npt.NDArray, npt.NDArray,
@@ -32,7 +35,6 @@ def _shrink_tree_rec(dt, shrink_mode, lmb=0,
                      node=0, parent_node=None, parent_val=None, cum_sum=None):
     """
     Go through the tree and shrink contributions recursively
-    Don't call this function directly, use shrink_forest or shrink_tree
     """
     left = dt.tree_.children_left[node]
     right = dt.tree_.children_right[node]
@@ -44,7 +46,7 @@ def _shrink_tree_rec(dt, shrink_mode, lmb=0,
         value = dt.tree_.value[node, :, :]
     else:
         # Normalize to probability vector
-        value = deepcopy(dt.tree_.value[node, :, :] / dt.tree_.weighted_n_node_samples[node])
+        value = dt.tree_.value[node, :, :] / dt.tree_.weighted_n_node_samples[node]
 
     # cum_sum contains the value of the telescopic sum
     # If root: initialize cum_sum to the value of the root node
@@ -85,12 +87,12 @@ def _shrink_tree_rec(dt, shrink_mode, lmb=0,
     assert not np.isnan(dt.tree_.impurity[node]), "Impurity is NaN"
     # If not leaf: recurse
     if not (left == -1 and right == -1):
-        X_train_left = deepcopy(X_train[X_train[:, feature] <= threshold])
-        X_train_right = deepcopy(X_train[X_train[:, feature] > threshold])
+        X_train_left = X_train[X_train[:, feature] <= threshold]
+        X_train_right = X_train[X_train[:, feature] > threshold]
         _shrink_tree_rec(dt, shrink_mode, lmb, X_train_left, X_train, left,
-                            node, value, deepcopy(cum_sum))
+                            node, value, cum_sum.copy())
         _shrink_tree_rec(dt, shrink_mode, lmb, X_train_right, X_train,
-                            right, node, value, deepcopy(cum_sum))
+                            right, node, value, cum_sum.copy())
 
 
 class ShrinkageEstimator(BaseEstimator):
@@ -117,16 +119,33 @@ class ShrinkageEstimator(BaseEstimator):
         self.estimator_.set_params(random_state=self.random_state)
         self.estimator_.fit(X, y, **kwargs)
 
+        # Save a copy of the original estimator
+        self.orig_estimator_ = deepcopy(self.estimator_)
+
+        # Apply hierarchical shrinkage
         self.shrink(X)
 
         return self
-
+    
     def shrink(self, X):
         if hasattr(self.estimator_, "estimators_"):  # Random Forest
-            for estimator in self.estimator_.estimators_:
-                _shrink_tree_rec(estimator, self.shrink_mode, self.lmb, X)
+            Parallel(n_jobs=-1)(delayed(_shrink_tree_rec)(
+                estimator, self.shrink_mode, self.lmb, X)
+                for estimator in self.estimator_.estimators_)
         else:  # Single tree
             _shrink_tree_rec(self.estimator_, self.shrink_mode, self.lmb, X)
+    
+    def set_shrink_params(self, X, shrink_mode=None, lmb=None):
+        if shrink_mode is not None:
+            self.shrink_mode = shrink_mode
+        if lmb is not None:
+            self.lmb = lmb
+        
+        # Reset the estimator to the original one
+        self.estimator_ = deepcopy(self.orig_estimator_)
+
+        # Apply hierarchical shrinkage
+        self.shrink(X)
 
     def _validate_arguments(self, X, y, feature_names):
         if self.shrink_mode not in ["hs", "hs_entropy", "hs_entropy_2",
@@ -166,6 +185,33 @@ class ShrinkageRegressor(ShrinkageEstimator, RegressorMixin):
         return DecisionTreeRegressor()
 
 
+def cross_val_lmb(shrinkage_estimator, X, y, shrink_mode, lmb_range, n_splits,
+                  score_fn="balanced_accuracy"):
+    lmb_scores = []
+    cv = KFold(n_splits=n_splits, shuffle=True)
+    # TODO use joblib to parallelize this (see titanic_passengerid.ipynb)
+    for i, (train_index, test_index) in enumerate(cv.split(X)):
+        lmb_scores.append([])
+        X_train, X_test = X[train_index], X[test_index]
+        y_train, y_test = y[train_index], y[test_index]
+
+        shrinkage_estimator.fit(X_train, y_train)
+
+        for lmb in lmb_range:
+            shrinkage_estimator.set_shrink_params(X_train, shrink_mode=shrink_mode, lmb=lmb)
+            if score_fn == "balanced_accuracy":
+                lmb_scores[i].append(balanced_accuracy_score(y_test, shrinkage_estimator.predict(X_test)))
+            elif score_fn == "mse":
+                lmb_scores[i].append(mean_squared_error(y_test, shrinkage_estimator.predict(X_test)))
+            else:
+                raise ValueError("Invalid score function")
+    # Shape: [n_splits, n_lmb]
+    lmb_scores = np.array(lmb_scores)
+    return np.average(lmb_scores, axis=0)
+
+
+
 if __name__ == "__main__":
-    check_estimator(ShrinkageClassifier())
-    check_estimator(ShrinkageRegressor())
+    from sklearn.ensemble import RandomForestClassifier, RandomForestRegressor
+    check_estimator(ShrinkageClassifier(RandomForestClassifier()))
+    check_estimator(ShrinkageRegressor(RandomForestRegressor()))
