@@ -189,24 +189,28 @@ def cross_val_lmb(shrinkage_estimator, X, y, shrink_mode, lmb_range, n_splits,
                   score_fn="balanced_accuracy"):
     lmb_scores = []
     cv = KFold(n_splits=n_splits, shuffle=True)
-    # TODO use joblib to parallelize this (see titanic_passengerid.ipynb)
-    for i, (train_index, test_index) in enumerate(cv.split(X)):
-        lmb_scores.append([])
+
+    def _single_fold(train_index, test_index, X, y, lmbs, shrink_mode):
         X_train, X_test = X[train_index], X[test_index]
         y_train, y_test = y[train_index], y[test_index]
 
         shrinkage_estimator.fit(X_train, y_train)
 
-        for lmb in lmb_range:
+        scores = []
+        for lmb in lmbs:
             shrinkage_estimator.set_shrink_params(X_train, shrink_mode=shrink_mode, lmb=lmb)
             if score_fn == "balanced_accuracy":
-                lmb_scores[i].append(balanced_accuracy_score(y_test, shrinkage_estimator.predict(X_test)))
+                scores.append(balanced_accuracy_score(y_test, shrinkage_estimator.predict(X_test)))
             elif score_fn == "mse":
-                lmb_scores[i].append(mean_squared_error(y_test, shrinkage_estimator.predict(X_test)))
+                scores.append(mean_squared_error(y_test, shrinkage_estimator.predict(X_test)))
             else:
                 raise ValueError("Invalid score function")
-    # Shape: [n_splits, n_lmb]
-    lmb_scores = np.array(lmb_scores)
+        return scores
+
+    lmb_scores = np.array(Parallel(n_jobs=-1)(delayed(_single_fold)(
+        train_index, test_index, X, y, lmb_range, shrink_mode)
+        for train_index, test_index in cv.split(X)))
+
     return np.average(lmb_scores, axis=0)
 
 
