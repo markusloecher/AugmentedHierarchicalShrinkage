@@ -1,4 +1,5 @@
 from abc import abstractmethod
+import time
 from copy import deepcopy
 from typing import Tuple, List
 
@@ -129,9 +130,8 @@ class ShrinkageEstimator(BaseEstimator):
     
     def shrink(self, X):
         if hasattr(self.estimator_, "estimators_"):  # Random Forest
-            Parallel(n_jobs=-1)(delayed(_shrink_tree_rec)(
-                estimator, self.shrink_mode, self.lmb, X)
-                for estimator in self.estimator_.estimators_)
+            for estimator in self.estimator_.estimators_:
+                _shrink_tree_rec(estimator, self.shrink_mode, self.lmb, X)
         else:  # Single tree
             _shrink_tree_rec(self.estimator_, self.shrink_mode, self.lmb, X)
     
