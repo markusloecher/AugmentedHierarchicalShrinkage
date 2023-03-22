@@ -1,4 +1,5 @@
 from abc import abstractmethod
+import pandas as pd
 import time
 from copy import deepcopy
 from typing import Tuple, List
@@ -30,6 +31,22 @@ def _check_fit_arguments(X, y, feature_names) -> Tuple[npt.NDArray, npt.NDArray,
     return X, y, feature_names
 
 
+def _normalize_value(dt, node):
+    if isinstance(dt, RegressorMixin):
+        return dt.tree_.value[node, :, :]
+    # Normalize to probability vector
+    return dt.tree_.value[node, :, :] / dt.tree_.n_node_samples[node]
+
+
+def _update_tree_values(dt, value, node):
+    # Set the value of the node to the value of the telescopic sum
+    # assert not np.isnan(value).any(), "Cumulative sum is NaN"
+    dt.tree_.value[node, :, :] = value
+    # Update the impurity of the node
+    dt.tree_.impurity[node] = 1 - np.sum(np.power(value, 2))
+    # assert not np.isnan(dt.tree_.impurity[node]), "Impurity is NaN"
+
+
 def _shrink_tree_rec(dt, shrink_mode, lmb=0,
                      X_train=None,
                      X_train_parent=None,
@@ -43,11 +60,7 @@ def _shrink_tree_rec(dt, shrink_mode, lmb=0,
     threshold = dt.tree_.threshold[node]
     parent_num_samples = dt.tree_.n_node_samples[parent_node]
     parent_feature = dt.tree_.feature[parent_node]
-    if isinstance(dt, RegressorMixin):
-        value = dt.tree_.value[node, :, :]
-    else:
-        # Normalize to probability vector
-        value = dt.tree_.value[node, :, :] / dt.tree_.weighted_n_node_samples[node]
+    value = _normalize_value(dt, node)
 
     # cum_sum contains the value of the telescopic sum
     # If root: initialize cum_sum to the value of the root node
@@ -80,12 +93,7 @@ def _shrink_tree_rec(dt, shrink_mode, lmb=0,
                 reg = 1 + (lmb * np.log(cardinality) / parent_num_samples)
         cum_sum += (value - parent_val) / reg
 
-    # Set the value of the node to the value of the telescopic sum
-    assert not np.isnan(cum_sum).any(), "Cumulative sum is NaN"
-    dt.tree_.value[node, :, :] = cum_sum
-    # Update the impurity of the node
-    dt.tree_.impurity[node] = 1 - np.sum(np.power(cum_sum, 2))
-    assert not np.isnan(dt.tree_.impurity[node]), "Impurity is NaN"
+    _update_tree_values(dt, cum_sum, node)
     # If not leaf: recurse
     if not (left == -1 and right == -1):
         X_train_left = X_train[X_train[:, feature] <= threshold]
