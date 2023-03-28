@@ -17,15 +17,20 @@ def simulate_categorical(n_samples: int, relevance: float):
 
 if __name__ == "__main__":
     from sklearn.ensemble import RandomForestClassifier
-    from sklearn.tree import DecisionTreeClassifier
     import numpy as np
-    import simulation
-    import matplotlib.pyplot as plt
     from aughs import ShrinkageClassifier, cross_val_lmb
     from tqdm import tqdm
+    from argparse import ArgumentParser
+    import joblib
 
-    N_REPLICATIONS = 1
-    LAMBDAS = np.arange(0, 100, 5)
+    parser = ArgumentParser()
+    parser.add_argument("--n-replications", type=int, default=1)
+    parser.add_argument("--lambdas", type=str, default="0,100,1")
+    parser.add_argument("--output-file", type=str, default="simulation.pkl")
+    args = parser.parse_args()
+
+    N_REPLICATIONS = args.n_replications
+    LAMBDAS = np.arange(*[int(x) for x in args.lambdas.split(",")])
     
     result = {}
     prog_relevance = tqdm([0., 0.05, 0.1, 0.15, 0.2])
@@ -38,7 +43,7 @@ if __name__ == "__main__":
         }
         prog_replication = tqdm(range(N_REPLICATIONS), desc="Replication")
         for i in prog_replication:
-            X, y = simulation.simulate_categorical(1000, relevance)
+            X, y = simulate_categorical(1000, relevance)
             
             # Compute importances for classical RF
             rfc = RandomForestClassifier(n_estimators=5).fit(X, y)
@@ -56,3 +61,4 @@ if __name__ == "__main__":
                 hsc.fit(X, y)
                 importances[key][i, :] = hsc.estimator_.feature_importances_
         result[relevance] = importances
+    joblib.dump(result, args.output_file)
