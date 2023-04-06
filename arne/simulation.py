@@ -26,16 +26,21 @@ if __name__ == "__main__":
     import joblib
 
     parser = ArgumentParser()
-    parser.add_argument("--n-replications", type=int, default=1)
-    parser.add_argument("--lambdas", type=str, default="0,100,1")
-    parser.add_argument("--output-file", type=str, default="simulation.pkl")
+    parser.add_argument("--n-replications", type=int, default=2)
+    parser.add_argument("--lambdas", type=str, default="0,100,5")
+    parser.add_argument("--relevances-file", type=str, default="simulation.pkl")
+    parser.add_argument("--scores-file", type=str, default="simulation_scores.pkl")
     args = parser.parse_args()
 
     N_REPLICATIONS = args.n_replications
     LAMBDAS = np.arange(*[int(x) for x in args.lambdas.split(",")])
 
+    relevances = [0., 0.05, 0.1, 0.15, 0.2]
+    shrink_modes = ["hs", "hs_entropy", "hs_log_cardinality"]
     result = {}
-    prog_relevance = tqdm([0., 0.05, 0.1, 0.15, 0.2])
+    all_lmb_scores = {
+        sm: {rel: [] for rel in relevances} for sm in shrink_modes}
+    prog_relevance = tqdm(relevances)
     for relevance in prog_relevance:
         prog_relevance.set_description(f"Relevance: {relevance}")
         importances = {
@@ -57,6 +62,7 @@ if __name__ == "__main__":
                                         ["Hierarchical Shrinkage", "HS: Entropy", "HS: log cardinality"]):
                 lmb_scores = cross_val_lmb(
                     hsc, X, y, shrink_mode, LAMBDAS, n_splits=5, n_jobs=-1)
+                all_lmb_scores[shrink_mode][relevance].append(lmb_scores)
                 best_idx = np.argmax(lmb_scores)
                 best_lmb = LAMBDAS[best_idx]
                 hsc.lmb = best_lmb
@@ -64,4 +70,9 @@ if __name__ == "__main__":
                 hsc.fit(X, y)
                 importances[key][i, :] = hsc.estimator_.feature_importances_
         result[relevance] = importances
-    joblib.dump(result, args.output_file)
+    joblib.dump(result, args.relevances_file)
+    
+    for sm in shrink_modes:
+        for rel in relevances:
+            all_lmb_scores[sm][rel] = np.array(all_lmb_scores[sm][rel])
+    joblib.dump(all_lmb_scores, args.scores_file)
