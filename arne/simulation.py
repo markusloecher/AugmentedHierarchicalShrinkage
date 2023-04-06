@@ -17,62 +17,88 @@ def simulate_categorical(n_samples: int, relevance: float):
     return X, y
 
 
+def run_experiment(lambdas, relevances, shrink_modes):
+    result = {rel: {sm: None for sm in shrink_modes} for rel in relevances}
+    all_lmb_scores = {rel: {sm: None for sm in shrink_modes}
+                      for rel in relevances}
+    for relevance in relevances:
+        importances = {}
+        X, y = simulate_categorical(1000, relevance)
+
+        # Compute importances for classical RF
+        rfc = RandomForestClassifier().fit(X, y)
+        importances["random_forest"] = rfc.feature_importances_
+
+        # Compute importances for different HS modes
+        hsc = ShrinkageClassifier(RandomForestClassifier())
+        for shrink_mode in ["hs", "hs_entropy", "hs_log_cardinality"]:
+            lmb_scores = cross_val_lmb(
+                hsc, X, y, shrink_mode, lambdas, n_splits=5, n_jobs=1)
+            all_lmb_scores[relevance][shrink_mode] = lmb_scores
+            best_idx = np.argmax(lmb_scores)
+            best_lmb = lambdas[best_idx]
+            hsc.set_shrink_params(shrink_mode=shrink_mode, lmb=best_lmb)
+            importances[shrink_mode] = hsc.estimator_.feature_importances_
+        result[relevance] = importances
+    return result, all_lmb_scores
+
+
 if __name__ == "__main__":
     from sklearn.ensemble import RandomForestClassifier
     import numpy as np
     from aughs import ShrinkageClassifier, cross_val_lmb
-    from tqdm import tqdm
+    from tqdm import trange
     from argparse import ArgumentParser
     import joblib
 
     parser = ArgumentParser()
-    parser.add_argument("--n-replications", type=int, default=2)
-    parser.add_argument("--lambdas", type=str, default="0,100,5")
-    parser.add_argument("--relevances-file", type=str, default="simulation.pkl")
-    parser.add_argument("--scores-file", type=str, default="simulation_scores.pkl")
+    parser.add_argument("--n-replications", type=int, default=4)
+    parser.add_argument("--lambdas", type=str, default="0,100,10")
+    parser.add_argument("--importances-file", type=str,
+                        default="simulation.pkl")
+    parser.add_argument("--scores-file", type=str,
+                        default="simulation_scores.pkl")
+    parser.add_argument("--n-jobs", type=int, default=-1)
     args = parser.parse_args()
 
-    N_REPLICATIONS = args.n_replications
-    LAMBDAS = np.arange(*[int(x) for x in args.lambdas.split(",")])
-
+    lambdas = np.arange(*[int(x) for x in args.lambdas.split(",")])
     relevances = [0., 0.05, 0.1, 0.15, 0.2]
     shrink_modes = ["hs", "hs_entropy", "hs_log_cardinality"]
-    result = {}
-    all_lmb_scores = {
-        sm: {rel: [] for rel in relevances} for sm in shrink_modes}
-    prog_relevance = tqdm(relevances)
-    for relevance in prog_relevance:
-        prog_relevance.set_description(f"Relevance: {relevance}")
-        importances = {
-            key: np.zeros((N_REPLICATIONS, 5))
-            for key in ["Random Forest", "Hierarchical Shrinkage",
-                        "HS: Entropy", "HS: log cardinality"]
-        }
-        prog_replication = tqdm(range(N_REPLICATIONS), desc="Replication")
-        for i in prog_replication:
-            X, y = simulate_categorical(1000, relevance)
 
-            # Compute importances for classical RF
-            rfc = RandomForestClassifier(n_estimators=5).fit(X, y)
-            importances["Random Forest"][i, :] = rfc.feature_importances_
-
-            # Compute importances for different HS modes
-            hsc = ShrinkageClassifier(RandomForestClassifier(n_estimators=5))
-            for shrink_mode, key in zip(["hs", "hs_entropy", "hs_log_cardinality"],
-                                        ["Hierarchical Shrinkage", "HS: Entropy", "HS: log cardinality"]):
-                lmb_scores = cross_val_lmb(
-                    hsc, X, y, shrink_mode, LAMBDAS, n_splits=5, n_jobs=-1)
-                all_lmb_scores[shrink_mode][relevance].append(lmb_scores)
-                best_idx = np.argmax(lmb_scores)
-                best_lmb = LAMBDAS[best_idx]
-                hsc.lmb = best_lmb
-                hsc.shrink_mode = shrink_mode
-                hsc.fit(X, y)
-                importances[key][i, :] = hsc.estimator_.feature_importances_
-        result[relevance] = importances
-    joblib.dump(result, args.relevances_file)
+    results = joblib.Parallel(n_jobs=args.n_jobs, verbose=10)(
+        joblib.delayed(run_experiment)(lambdas, relevances, shrink_modes)
+        for _ in range(args.n_replications))
     
-    for sm in shrink_modes:
+    print("DONE")
+
+    # Gather all results
+    importances = {
+        rel: {
+            mode: [] for mode in shrink_modes + ["random_forest"]}
+        for rel in relevances
+    }
+
+    scores = {
+        rel: {
+            mode: [] for mode in shrink_modes}
+        for rel in relevances
+    }
+
+    # Concatenate results
+    for result, all_lmb_scores in results:
         for rel in relevances:
-            all_lmb_scores[sm][rel] = np.array(all_lmb_scores[sm][rel])
-    joblib.dump(all_lmb_scores, args.scores_file)
+            for mode in shrink_modes + ["random_forest"]:
+                importances[rel][mode].append(result[rel][mode])
+            for mode in shrink_modes:
+                scores[rel][mode].append(all_lmb_scores[rel][mode])
+    
+    # Convert to numpy arrays
+    for rel in relevances:
+        for mode in shrink_modes + ["random_forest"]:
+            importances[rel][mode] = np.array(importances[rel][mode])
+        for mode in shrink_modes:
+            scores[rel][mode] = np.array(scores[rel][mode])
+
+    # Save to disk
+    joblib.dump(importances, args.importances_file)
+    joblib.dump(scores, args.scores_file)

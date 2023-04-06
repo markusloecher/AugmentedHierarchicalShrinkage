@@ -157,7 +157,7 @@ class ShrinkageEstimator(BaseEstimator):
         else:  # Single tree
             self._shrink_tree_rec(self.estimator_, 0)
     
-    def set_shrink_params(self, X, shrink_mode=None, lmb=None):
+    def set_shrink_params(self, shrink_mode=None, lmb=None):
         if shrink_mode is not None:
             self.shrink_mode = shrink_mode
         if lmb is not None:
@@ -222,7 +222,7 @@ def cross_val_lmb(shrinkage_estimator, X, y, shrink_mode, lmb_range, n_splits,
 
         scores = []
         for lmb in lmbs:
-            shrinkage_estimator.set_shrink_params(X_train, shrink_mode=shrink_mode, lmb=lmb)
+            shrinkage_estimator.set_shrink_params(shrink_mode=shrink_mode, lmb=lmb)
             if score_fn == "balanced_accuracy":
                 scores.append(balanced_accuracy_score(y_test, shrinkage_estimator.predict(X_test)))
             elif score_fn == "mse":
