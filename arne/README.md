@@ -17,13 +17,6 @@ Usage of these two classes is entirely analogous, and works just like any other 
         $$
         \hat{f}(\mathbf{x}) = \mathbb{E}_{t_0}[y] + \sum_{l=1}^L\frac{\mathbb{E}_{t_l}[y] - \mathbb{E}_{t_{l-1}}[y]}{1 + \frac{\lambda H(t_{l-1})}{N(t_{l-1})}}
         $$
-        - `"hs_entropy_2"`: Augmented Hierarchical Shrinkage with added entropy term outside of the fraction.
-        $$
-        \begin{aligned}
-        \hat{f}(\mathbf{x}) &= \mathbb{E}_{t_0}[y] + \sum_{l=1}^L\frac{\mathbb{E}_{t_l}[y] - \mathbb{E}_{t_{l-1}}[y]}{H(t_{l-1})\left(1 + \frac{\lambda}{N(t_{l-1})}\right)} \\
-        &= \mathbb{E}_{t_0}[y] + \sum_{l=1}^L\frac{\mathbb{E}_{t_l}[y] - \mathbb{E}_{t_{l-1}}[y]}{H(t_{l-1}) + \frac{\lambda H(t_{l-1})}{N(t_{l-1})}}
-        \end{aligned}
-        $$
         - `"hs_log_cardinality"`: Augmented Hierarchical Shrinkage with log of cardinality term in numerator of the fraction.
         $$
         \hat{f}(\mathbf{x}) = \mathbb{E}_{t_0}[y] + \sum_{l=1}^L\frac{\mathbb{E}_{t_l}[y] - \mathbb{E}_{t_{l-1}}[y]}{1 + \frac{\lambda \log C(t_{l-1})}{N(t_{l-1})}}

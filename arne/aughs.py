@@ -77,6 +77,7 @@ class ShrinkageEstimator(BaseEstimator):
             cardinalities[node] = len(counts)
 
             # Recursively compute entropy and cardinality of the children
+            # TODO split train data into left and right
             self._compute_node_entropies(dt, X_train, left, entropies, cardinalities)
             self._compute_node_entropies(dt, X_train, right, entropies, cardinalities)
         return entropies, cardinalities
@@ -103,15 +104,10 @@ class ShrinkageEstimator(BaseEstimator):
                 # Classic hierarchical shrinkage
                 reg = 1 + (self.lmb / parent_num_samples)
             else:
-                if self.shrink_mode in ["hs_entropy", "hs_entropy_2"]:
+                if self.shrink_mode == "hs_entropy":
+                    # Entropy-based shrinkage
                     entropy = self.entropies_[dt_idx][parent_node]
-                    if self.shrink_mode == "hs_entropy":
-                        # Entropy-based shrinkage
-                        reg = 1 + (self.lmb * entropy / parent_num_samples)
-                    elif self.shrink_mode == "hs_entropy_2":
-                        # Entropy-based shrinkage, but entropy term is added
-                        # outside of the fraction
-                        reg = entropy * (1 + self.lmb / parent_num_samples)
+                    reg = 1 + (self.lmb * entropy / parent_num_samples)
                 elif self.shrink_mode == "hs_log_cardinality":
                     # Cardinality-based shrinkage
                     cardinality = self.cardinalities_[dt_idx][parent_node]
@@ -176,7 +172,7 @@ class ShrinkageEstimator(BaseEstimator):
         self.shrink()
 
     def _validate_arguments(self, X, y, feature_names):
-        if self.shrink_mode not in ["hs", "hs_entropy", "hs_entropy_2",
+        if self.shrink_mode not in ["hs", "hs_entropy",
                                     "hs_log_cardinality"]:
             raise ValueError("Invalid choice for shrink_mode")
         X, y, feature_names = _check_fit_arguments(
