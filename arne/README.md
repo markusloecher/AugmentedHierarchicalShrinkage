@@ -26,5 +26,5 @@ Usage of these two classes is entirely analogous, and works just like any other 
     - `random_state`: random state for reproducibility
 - Other functions: `fit(X, y)`, `predict(X)`, `predict_proba(X)`, `score(X, y)` work just like with any other `sklearn` estimator.
 
-## Notebooks
-[aughs_cv_titanic.ipynb](aughs_cv_titanic.ipynb) demonstrates how we can tune hyperparameters for shrinkage models using cross-validation.
+## Tutorials
+
