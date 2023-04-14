@@ -1,6 +1,7 @@
 .vscode
 arne/data
 arne/output
+arne/**/*.pkl
 Session.vim
 *.egg-info
 .coverage

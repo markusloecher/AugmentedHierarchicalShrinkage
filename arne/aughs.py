@@ -3,6 +3,7 @@ import pandas as pd
 import time
 from copy import deepcopy
 from typing import Tuple, List
+from tqdm import tqdm
 
 import numpy as np
 import scipy
@@ -12,12 +13,19 @@ from sklearn.tree import DecisionTreeClassifier, DecisionTreeRegressor
 from sklearn.utils.validation import check_X_y, check_is_fitted
 from sklearn.utils.estimator_checks import check_estimator
 from sklearn.model_selection import KFold
-from sklearn.metrics import mean_squared_error, balanced_accuracy_score
+from sklearn.metrics import (
+    mean_squared_error,
+    balanced_accuracy_score,
+    accuracy_score,
+    mean_absolute_error,
+    r2_score,
+)
 from joblib import Parallel, delayed
 
 
-def _check_fit_arguments(X, y, feature_names) -> Tuple[npt.NDArray, npt.NDArray,
-                                                       List[str]]:
+def _check_fit_arguments(
+    X, y, feature_names
+) -> Tuple[npt.NDArray, npt.NDArray, List[str]]:
     if feature_names is None:
         if hasattr(X, "columns"):
             feature_names = X.columns
@@ -25,8 +33,9 @@ def _check_fit_arguments(X, y, feature_names) -> Tuple[npt.NDArray, npt.NDArray,
             X, y = check_X_y(X, y)
             feature_names = [f"feature_{i}" for i in range(X.shape[1])]
     else:
-        assert len(feature_names) == X.shape[1],\
-            "Number of feature names must match number of features"
+        assert (
+            len(feature_names) == X.shape[1]
+        ), "Number of feature names must match number of features"
     X, y = check_X_y(X, y)
     return X, y, feature_names
 
@@ -48,19 +57,25 @@ def _update_tree_values(dt, value, node):
 
 
 class ShrinkageEstimator(BaseEstimator):
-    def __init__(self, base_estimator: BaseEstimator = None,
-                 shrink_mode: str = "hs", lmb: float = 1,
-                 random_state=None):
+    def __init__(
+        self,
+        base_estimator: BaseEstimator = None,
+        shrink_mode: str = "hs",
+        lmb: float = 1,
+        random_state=None,
+    ):
         self.base_estimator = base_estimator
         self.shrink_mode = shrink_mode
         self.lmb = lmb
         self.random_state = random_state
-    
+
     @abstractmethod
     def get_default_estimator(self):
         raise NotImplemented
-    
-    def _compute_node_entropies(self, dt, X_train, node=0, entropies=None, cardinalities=None):
+
+    def _compute_node_entropies(
+        self, dt, X_train, node=0, entropies=None, cardinalities=None
+    ):
         left = dt.tree_.children_left[node]
         right = dt.tree_.children_right[node]
         feature = dt.tree_.feature[node]
@@ -77,13 +92,14 @@ class ShrinkageEstimator(BaseEstimator):
             cardinalities[node] = len(counts)
 
             # Recursively compute entropy and cardinality of the children
+            # TODO split train data into left and right
             self._compute_node_entropies(dt, X_train, left, entropies, cardinalities)
             self._compute_node_entropies(dt, X_train, right, entropies, cardinalities)
         return entropies, cardinalities
 
-    
-    def _shrink_tree_rec(self, dt, dt_idx, node=0, parent_node=None,
-                         parent_val=None, cum_sum=None):
+    def _shrink_tree_rec(
+        self, dt, dt_idx, node=0, parent_node=None, parent_val=None, cum_sum=None
+    ):
         """
         Go through the tree and shrink contributions recursively
         """
@@ -97,21 +113,17 @@ class ShrinkageEstimator(BaseEstimator):
         if parent_node is None:
             cum_sum = value
         else:
-            # If not root: update cum_sum based on the value of the current node and the parent node
+            # If not root: update cum_sum based on the value of the current 
+            # node and the parent node
             reg = 1
             if self.shrink_mode == "hs":
                 # Classic hierarchical shrinkage
                 reg = 1 + (self.lmb / parent_num_samples)
             else:
-                if self.shrink_mode in ["hs_entropy", "hs_entropy_2"]:
+                if self.shrink_mode == "hs_entropy":
+                    # Entropy-based shrinkage
                     entropy = self.entropies_[dt_idx][parent_node]
-                    if self.shrink_mode == "hs_entropy":
-                        # Entropy-based shrinkage
-                        reg = 1 + (self.lmb * entropy / parent_num_samples)
-                    elif self.shrink_mode == "hs_entropy_2":
-                        # Entropy-based shrinkage, but entropy term is added
-                        # outside of the fraction
-                        reg = entropy * (1 + self.lmb / parent_num_samples)
+                    reg = 1 + (self.lmb * entropy / parent_num_samples)
                 elif self.shrink_mode == "hs_log_cardinality":
                     # Cardinality-based shrinkage
                     cardinality = self.cardinalities_[dt_idx][parent_node]
@@ -126,7 +138,7 @@ class ShrinkageEstimator(BaseEstimator):
     def fit(self, X, y, **kwargs):
         X, y = self._validate_arguments(X, y, kwargs.pop("feature_names", None))
 
-        if self.base_estimator is not None:    
+        if self.base_estimator is not None:
             self.estimator_ = clone(self.base_estimator)
         else:
             self.estimator_ = self.get_default_estimator()
@@ -153,34 +165,32 @@ class ShrinkageEstimator(BaseEstimator):
         # Apply hierarchical shrinkage
         self.shrink()
         return self
-    
+
     def shrink(self):
         if hasattr(self.estimator_, "estimators_"):  # Random Forest
             for i, estimator in enumerate(self.estimator_.estimators_):
                 self._shrink_tree_rec(estimator, i)
         else:  # Single tree
             self._shrink_tree_rec(self.estimator_, 0)
-    
-    def set_shrink_params(self, X, shrink_mode=None, lmb=None):
+
+    def set_shrink_params(self, shrink_mode=None, lmb=None):
         if shrink_mode is not None:
             self.shrink_mode = shrink_mode
         if lmb is not None:
             self.lmb = lmb
         if not hasattr(self, "entropies_"):
             raise ValueError("Cannot set shrinkage parameters before fitting")
-        
+
         # Reset the estimator to the original one
         self.estimator_ = deepcopy(self.orig_estimator_)
-        
+
         # Apply hierarchical shrinkage
         self.shrink()
 
     def _validate_arguments(self, X, y, feature_names):
-        if self.shrink_mode not in ["hs", "hs_entropy", "hs_entropy_2",
-                                    "hs_log_cardinality"]:
+        if self.shrink_mode not in ["hs", "hs_entropy", "hs_log_cardinality"]:
             raise ValueError("Invalid choice for shrink_mode")
-        X, y, feature_names = _check_fit_arguments(
-            X, y, feature_names=feature_names)
+        X, y, feature_names = _check_fit_arguments(X, y, feature_names=feature_names)
         self.n_features_in_ = X.shape[1]
         self.feature_names_in_ = feature_names
         return X, y
@@ -202,7 +212,7 @@ class ShrinkageClassifier(ShrinkageEstimator, ClassifierMixin):
         super().fit(X, y, **kwargs)
         self.classes_ = self.estimator_.classes_
         return self
-    
+
     def predict_proba(self, X, *args, **kwargs):
         check_is_fitted(self)
         return self.estimator_.predict_proba(X, *args, **kwargs)
@@ -213,42 +223,83 @@ class ShrinkageRegressor(ShrinkageEstimator, RegressorMixin):
         return DecisionTreeRegressor()
 
 
-def cross_val_lmb(shrinkage_estimator, X, y, shrink_mode, lmb_range, n_splits,
-                  score_fn="balanced_accuracy", n_jobs=-1):
-    lmb_scores = []
+def cross_val_shrinkage(
+    shrinkage_estimator,
+    X,
+    y,
+    param_grid,
+    n_splits=5,
+    score_fn="balanced_accuracy",
+    n_jobs=-1,
+    verbose=0,
+    return_param_values=True
+):
     cv = KFold(n_splits=n_splits, shuffle=True)
+    shrink_modes = param_grid["shrink_mode"]
+    lmbs = param_grid["lmb"]
 
-    def _single_fold(train_index, test_index, X, y, lmbs, shrink_mode):
-        X_train, X_test = X[train_index], X[test_index]
-        y_train, y_test = y[train_index], y[test_index]
-
-        shrinkage_estimator.fit(X_train, y_train)
-
-        scores = []
+    # Create lists of all combinations of parameters
+    param_shrink_mode = []
+    param_lmb = []
+    for shrink_mode in shrink_modes:
         for lmb in lmbs:
-            shrinkage_estimator.set_shrink_params(X_train, shrink_mode=shrink_mode, lmb=lmb)
+            param_shrink_mode.append(shrink_mode)
+            param_lmb.append(lmb)
+
+    def _single_setting(shrink_mode, lmb):
+        scores = []
+        for train_index, test_index in cv.split(X):
+            X_train, X_test = X[train_index], X[test_index]
+            y_train, y_test = y[train_index], y[test_index]
+
+            shrinkage_estimator.fit(X_train, y_train)
+            shrinkage_estimator.set_shrink_params(shrink_mode=shrink_mode, lmb=lmb)
             if score_fn == "balanced_accuracy":
-                scores.append(balanced_accuracy_score(y_test, shrinkage_estimator.predict(X_test)))
+                scores.append(
+                    balanced_accuracy_score(y_test, shrinkage_estimator.predict(X_test))
+                )
+            elif score_fn == "accuracy":
+                scores.append(
+                    accuracy_score(y_test, shrinkage_estimator.predict(X_test))
+                )
+            elif score_fn == "r2":
+                scores.append(r2_score(y_test, shrinkage_estimator.predict(X_test)))
             elif score_fn == "mse":
-                scores.append(mean_squared_error(y_test, shrinkage_estimator.predict(X_test)))
+                scores.append(
+                    mean_squared_error(y_test, shrinkage_estimator.predict(X_test))
+                )
+            elif score_fn == "mae":
+                scores.append(
+                    mean_absolute_error(y_test, shrinkage_estimator.predict(X_test))
+                )
             else:
                 raise ValueError("Invalid score function")
-        return scores
+        return np.mean(scores)
 
     if n_jobs != 1:
-        lmb_scores = np.array(Parallel(n_jobs=-1)(delayed(_single_fold)(
-            train_index, test_index, X, y, lmb_range, shrink_mode)
-            for train_index, test_index in cv.split(X)))
+        with Parallel(n_jobs=n_jobs, verbose=verbose) as parallel:
+            scores = np.array(
+                parallel(
+                    delayed(_single_setting)(param_shrink_mode[i], param_lmb[i])
+                    for i in range(len(param_shrink_mode))
+                )
+            )
     else:
-        lmb_scores = np.array([_single_fold(
-            train_index, test_index, X, y, lmb_range, shrink_mode)
-            for train_index, test_index in cv.split(X)])
-
-    return np.average(lmb_scores, axis=0)
-
+        param_range = range(len(param_shrink_mode)) if verbose == 0 else tqdm(
+            range(len(param_shrink_mode)))
+        scores = np.array(
+            [
+                _single_setting(param_shrink_mode[i], param_lmb[i])
+                for i in param_range
+            ]
+        )
+    if return_param_values:
+        return scores, param_shrink_mode, param_lmb
+    return scores
 
 
 if __name__ == "__main__":
     from sklearn.ensemble import RandomForestClassifier, RandomForestRegressor
+
     check_estimator(ShrinkageClassifier(RandomForestClassifier()))
     check_estimator(ShrinkageRegressor(RandomForestRegressor()))

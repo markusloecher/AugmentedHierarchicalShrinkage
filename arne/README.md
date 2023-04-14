@@ -17,13 +17,6 @@ Usage of these two classes is entirely analogous, and works just like any other 
         $$
         \hat{f}(\mathbf{x}) = \mathbb{E}_{t_0}[y] + \sum_{l=1}^L\frac{\mathbb{E}_{t_l}[y] - \mathbb{E}_{t_{l-1}}[y]}{1 + \frac{\lambda H(t_{l-1})}{N(t_{l-1})}}
         $$
-        - `"hs_entropy_2"`: Augmented Hierarchical Shrinkage with added entropy term outside of the fraction.
-        $$
-        \begin{aligned}
-        \hat{f}(\mathbf{x}) &= \mathbb{E}_{t_0}[y] + \sum_{l=1}^L\frac{\mathbb{E}_{t_l}[y] - \mathbb{E}_{t_{l-1}}[y]}{H(t_{l-1})\left(1 + \frac{\lambda}{N(t_{l-1})}\right)} \\
-        &= \mathbb{E}_{t_0}[y] + \sum_{l=1}^L\frac{\mathbb{E}_{t_l}[y] - \mathbb{E}_{t_{l-1}}[y]}{H(t_{l-1}) + \frac{\lambda H(t_{l-1})}{N(t_{l-1})}}
-        \end{aligned}
-        $$
         - `"hs_log_cardinality"`: Augmented Hierarchical Shrinkage with log of cardinality term in numerator of the fraction.
         $$
         \hat{f}(\mathbf{x}) = \mathbb{E}_{t_0}[y] + \sum_{l=1}^L\frac{\mathbb{E}_{t_l}[y] - \mathbb{E}_{t_{l-1}}[y]}{1 + \frac{\lambda \log C(t_{l-1})}{N(t_{l-1})}}
@@ -33,5 +26,18 @@ Usage of these two classes is entirely analogous, and works just like any other 
     - `random_state`: random state for reproducibility
 - Other functions: `fit(X, y)`, `predict(X)`, `predict_proba(X)`, `score(X, y)` work just like with any other `sklearn` estimator.
 
-## Notebooks
-[aughs_cv_titanic.ipynb](aughs_cv_titanic.ipynb) demonstrates how we can tune hyperparameters for shrinkage models using cross-validation.
+## Tutorials
+
+- [General usage](notebooks/tutorial_general_usage.ipynb): Shows how to apply
+hierarchical shrinkage on a simple dataset and access feature importances.
+- [Cross-validating shrinkage parameters](notebooks/tutorial_shrinkage_cf.ipynb):
+Hyperparameters for (augmented) hierarchical shrinkage (i.e. `shrink_mode` and
+`lmb`) can be tuned using cross-validation, without having to retrain the
+underlying model. This is because (augmented) hierarchical shrinkage is a
+**fully post-hoc** procedure. As the `ShrinkageClassifier` and
+`ShrinkageRegressor` are valid scikit-learn estimators, you could simply tune
+these hyperparameters using [`GridSearchCV`](https://scikit-learn.org/stable/modules/generated/sklearn.model_selection.GridSearchCV.html) as you would do with any other scikit-learn
+model. However, this **will** retrain the decision tree or random forest, which
+leads to unnecessary performance loss. This notebook shows how you can use our
+cross-validation function to cross-validate `shrink_mode` and `lmb` without
+this performance loss.
