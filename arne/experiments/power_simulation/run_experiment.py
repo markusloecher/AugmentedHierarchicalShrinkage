@@ -1,4 +1,11 @@
 import numpy as np
+from sklearn.ensemble import RandomForestClassifier
+import numpy as np
+from aughs import ShrinkageClassifier, cross_val_shrinkage
+from tqdm import trange
+from argparse import ArgumentParser
+import joblib
+
 
 
 def simulate_categorical(n_samples: int, relevance: float):
@@ -18,39 +25,32 @@ def simulate_categorical(n_samples: int, relevance: float):
 
 
 def run_experiment(lambdas, relevances, shrink_modes):
-    result = {rel: {sm: None for sm in shrink_modes} for rel in relevances}
-    all_lmb_scores = {rel: {sm: None for sm in shrink_modes}
+    result_importances = {rel: {sm: None for sm in shrink_modes} for rel in relevances}
+    result_scores = {rel: {sm: None for sm in shrink_modes}
                       for rel in relevances}
     for relevance in relevances:
-        importances = {}
+        result_importances = {}
         X, y = simulate_categorical(1000, relevance)
 
         # Compute importances for classical RF
         rfc = RandomForestClassifier().fit(X, y)
-        importances["random_forest"] = rfc.feature_importances_
+        result_importances["random_forest"] = rfc.feature_importances_
 
         # Compute importances for different HS modes
         hsc = ShrinkageClassifier(RandomForestClassifier())
         for shrink_mode in ["hs", "hs_entropy", "hs_log_cardinality"]:
             lmb_scores = cross_val_lmb(
                 hsc, X, y, shrink_mode, lambdas, n_splits=5, n_jobs=1)
-            all_lmb_scores[relevance][shrink_mode] = lmb_scores
+            result_scores[relevance][shrink_mode] = lmb_scores
             best_idx = np.argmax(lmb_scores)
             best_lmb = lambdas[best_idx]
             hsc.set_shrink_params(shrink_mode=shrink_mode, lmb=best_lmb)
-            importances[shrink_mode] = hsc.estimator_.feature_importances_
-        result[relevance] = importances
-    return result, all_lmb_scores
+            result_importances[shrink_mode] = hsc.estimator_.feature_importances_
+        result_importances[relevance] = result_importances
+    return result_importances, result_scores
 
 
 if __name__ == "__main__":
-    from sklearn.ensemble import RandomForestClassifier
-    import numpy as np
-    from aughs import ShrinkageClassifier, cross_val_lmb
-    from tqdm import trange
-    from argparse import ArgumentParser
-    import joblib
-
     parser = ArgumentParser()
     parser.add_argument("--n-replications", type=int, default=4)
     parser.add_argument("--lambdas", type=str, default="0,100,10")

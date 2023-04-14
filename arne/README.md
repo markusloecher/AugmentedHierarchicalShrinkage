@@ -28,3 +28,16 @@ Usage of these two classes is entirely analogous, and works just like any other 
 
 ## Tutorials
 
+- [General usage](notebooks/tutorial_general_usage.ipynb): Shows how to apply
+hierarchical shrinkage on a simple dataset and access feature importances.
+- [Cross-validating shrinkage parameters](notebooks/tutorial_shrinkage_cf.ipynb):
+Hyperparameters for (augmented) hierarchical shrinkage (i.e. `shrink_mode` and
+`lmb`) can be tuned using cross-validation, without having to retrain the
+underlying model. This is because (augmented) hierarchical shrinkage is a
+**fully post-hoc** procedure. As the `ShrinkageClassifier` and
+`ShrinkageRegressor` are valid scikit-learn estimators, you could simply tune
+these hyperparameters using [`GridSearchCV`](https://scikit-learn.org/stable/modules/generated/sklearn.model_selection.GridSearchCV.html) as you would do with any other scikit-learn
+model. However, this **will** retrain the decision tree or random forest, which
+leads to unnecessary performance loss. This notebook shows how you can use our
+cross-validation function to cross-validate `shrink_mode` and `lmb` without
+this performance loss.
