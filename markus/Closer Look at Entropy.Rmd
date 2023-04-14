@@ -1,0 +1,52 @@
+---
+title: "Closer Look at Entropy"
+author: "Loecher"
+date: '2023-03-15'
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+The goal of inspecting the actual entropy values is to spot outliers and especially small values
+
+```{r}
+entropies = list()
+entropies[["titanic"]] <- read.table("Node_Attributes_titanic.csv", quote="\"", comment.char="")
+entropies[["heart"]] <- read.table("Node_Attributes_heart.csv", quote="\"", comment.char="")
+entropies[["ionosphere"]] <- read.table("Node_Attributes_ionosphere.csv", quote="\"", comment.char="")
+for (i in 1:length(entropies)){
+  colnames(entropies[[i]]) = c("node", "entropy", "parent_num_samples", "num_samples")
+  entropies[[i]][,"dataset"] = names(entropies)[i]
+}
+```
+
+
+### Titanic
+
+```{r}
+par(mfrow=c(1,2))
+hist(entropies[["titanic"]]$entropy, xlab = "entropy", main = "titanic");grid()
+plot(entropy ~ num_samples, data = entropies[["titanic"]], pch=20, col = rgb(0,0,1,0.25), cex = 0.5, main = "titanic", log = "xy");grid()
+```
+
+
+### Heart
+
+```{r}
+par(mfrow=c(1,2))
+ds="heart"
+hist(entropies[[ds]]$entropy, xlab = "entropy", main = ds);grid()
+plot(entropy ~ num_samples, data = entropies[[ds]], pch=20, col = rgb(0,0,1,0.25), cex = 0.5, main = ds, log = "xy");grid()
+```
+
+### Ionosphere
+
+```{r}
+par(mfrow=c(1,2))
+ds="ionosphere"
+hist(entropies[[ds]]$entropy, xlab = "entropy", main = ds);grid()
+plot(entropy ~ num_samples, data = entropies[[ds]], pch=20, col = rgb(0,0,1,0.25), cex = 0.5, main = ds, log = "xy");grid()
+
+```
