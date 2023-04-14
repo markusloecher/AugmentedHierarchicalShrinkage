@@ -21,7 +21,7 @@ def plot_scores(result, relevance):
     
     ax.legend()
     ax.set_title(f"Relevance: {relevance}")
-    ax.set_xticks(np.arange(10), np.arange(10)*10)
+    ax.set_xticks(np.arange(6), [0.1, 1.0, 10.0, 25.0, 50.0, 100.0])
     ax.set_xlabel("$\lambda$")
     ax.set_ylabel("Accuracy")
     return fig, ax
@@ -29,8 +29,8 @@ def plot_scores(result, relevance):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--input-file", type=str, default="arne/output/simulation_scores.pkl")
-    parser.add_argument("--output-dir", type=str, default="arne/plot")
+    parser.add_argument("--input-file", type=str, default="output/scores.pkl")
+    parser.add_argument("--output-dir", type=str, default="plot")
     args = parser.parse_args()
 
     if not os.path.isdir(args.output_dir):
@@ -39,7 +39,6 @@ if __name__ == "__main__":
     result = joblib.load(args.input_file)
     for relevance in result.keys():
         fig, ax = plot_scores(result, relevance)
-        rel_str = f"{relevance:.2f}".replace(".", "")[1:]
 
         fig.savefig(os.path.join(
-            args.output_dir, f"scores_{rel_str}.png"))
+            args.output_dir, f"scores_{relevance}.png"))

@@ -1,5 +1,9 @@
+import sys
+sys.path.append("../..")
+
 import numpy as np
 from sklearn.ensemble import RandomForestClassifier
+from sklearn.tree import DecisionTreeClassifier
 import numpy as np
 from aughs import ShrinkageClassifier, cross_val_shrinkage
 from tqdm import trange
@@ -24,77 +28,91 @@ def simulate_categorical(n_samples: int, relevance: float):
     return X, y
 
 
-def run_experiment(lambdas, relevances, shrink_modes):
-    result_importances = {rel: {sm: None for sm in shrink_modes} for rel in relevances}
+def run_experiment(lambdas, relevances, shrink_modes, clf_type="rf"):
+    relevances_str = ["{:.2f}".format(rel)[2:] for rel in relevances]
+    result_importances = {rel: {sm: None for sm in shrink_modes}
+                          for rel in relevances_str}
     result_scores = {rel: {sm: None for sm in shrink_modes}
-                      for rel in relevances}
-    for relevance in relevances:
-        result_importances = {}
+                      for rel in relevances_str}
+    for i, relevance in enumerate(relevances):
+        rel_str = relevances_str[i]
         X, y = simulate_categorical(1000, relevance)
 
-        # Compute importances for classical RF
-        rfc = RandomForestClassifier().fit(X, y)
-        result_importances["random_forest"] = rfc.feature_importances_
+        # Compute importances for classical RF/DT
+        if clf_type == "rf":
+            clf = RandomForestClassifier().fit(X, y)
+        elif clf_type == "dt":
+            clf = DecisionTreeClassifier().fit(X, y)
+        else:
+            raise ValueError("Unknown classifier type")
+        result_importances[rel_str]["no_shrinkage"] = clf.feature_importances_
 
         # Compute importances for different HS modes
-        hsc = ShrinkageClassifier(RandomForestClassifier())
+        if clf_type == "rf":
+            hsc = ShrinkageClassifier(RandomForestClassifier())
+        elif clf_type == "dt":
+            hsc = ShrinkageClassifier(DecisionTreeClassifier())
+        else:
+            raise ValueError("Unknown classifier type")
+
         for shrink_mode in ["hs", "hs_entropy", "hs_log_cardinality"]:
-            lmb_scores = cross_val_lmb(
-                hsc, X, y, shrink_mode, lambdas, n_splits=5, n_jobs=1)
-            result_scores[relevance][shrink_mode] = lmb_scores
+            param_grid = {"shrink_mode": [shrink_mode], "lmb": lambdas}
+            lmb_scores = cross_val_shrinkage(
+                hsc, X, y, param_grid, n_splits=5, n_jobs=1,
+                return_param_values=False)
+            result_scores[rel_str][shrink_mode] = lmb_scores
             best_idx = np.argmax(lmb_scores)
             best_lmb = lambdas[best_idx]
             hsc.set_shrink_params(shrink_mode=shrink_mode, lmb=best_lmb)
-            result_importances[shrink_mode] = hsc.estimator_.feature_importances_
-        result_importances[relevance] = result_importances
+            result_importances[rel_str][shrink_mode] = hsc.estimator_.feature_importances_
     return result_importances, result_scores
 
 
 if __name__ == "__main__":
     parser = ArgumentParser()
-    parser.add_argument("--n-replications", type=int, default=4)
-    parser.add_argument("--lambdas", type=str, default="0,100,10")
+    parser.add_argument("--n-replications", type=int, default=8)
     parser.add_argument("--importances-file", type=str,
-                        default="simulation.pkl")
+                        default="output/importances.pkl")
+    parser.add_argument("--clf-type", type=str, default="rf")
     parser.add_argument("--scores-file", type=str,
-                        default="simulation_scores.pkl")
+                        default="output/scores.pkl")
     parser.add_argument("--n-jobs", type=int, default=-1)
     args = parser.parse_args()
 
-    lambdas = np.arange(*[int(x) for x in args.lambdas.split(",")])
+    lambdas = [0.1, 1.0, 10.0, 25.0, 50.0, 100.0]
     relevances = [0., 0.05, 0.1, 0.15, 0.2]
+    relevances_str = ["{:.2f}".format(rel)[2:] for rel in relevances]
     shrink_modes = ["hs", "hs_entropy", "hs_log_cardinality"]
 
     results = joblib.Parallel(n_jobs=args.n_jobs, verbose=10)(
-        joblib.delayed(run_experiment)(lambdas, relevances, shrink_modes)
+        joblib.delayed(run_experiment)(lambdas, relevances, shrink_modes,
+                                       args.clf_type)
         for _ in range(args.n_replications))
     
-    print("DONE")
-
     # Gather all results
     importances = {
         rel: {
-            mode: [] for mode in shrink_modes + ["random_forest"]}
-        for rel in relevances
+            mode: [] for mode in shrink_modes + ["no_shrinkage"]}
+        for rel in relevances_str
     }
 
     scores = {
         rel: {
             mode: [] for mode in shrink_modes}
-        for rel in relevances
+        for rel in relevances_str
     }
 
     # Concatenate results
-    for result, all_lmb_scores in results:
-        for rel in relevances:
-            for mode in shrink_modes + ["random_forest"]:
-                importances[rel][mode].append(result[rel][mode])
+    for result_importances, result_scores in results:
+        for rel in relevances_str:
+            for mode in shrink_modes + ["no_shrinkage"]:
+                importances[rel][mode].append(result_importances[rel][mode])
             for mode in shrink_modes:
-                scores[rel][mode].append(all_lmb_scores[rel][mode])
+                scores[rel][mode].append(result_scores[rel][mode])
     
     # Convert to numpy arrays
-    for rel in relevances:
-        for mode in shrink_modes + ["random_forest"]:
+    for rel in relevances_str:
+        for mode in shrink_modes + ["no_shrinkage"]:
             importances[rel][mode] = np.array(importances[rel][mode])
         for mode in shrink_modes:
             scores[rel][mode] = np.array(scores[rel][mode])

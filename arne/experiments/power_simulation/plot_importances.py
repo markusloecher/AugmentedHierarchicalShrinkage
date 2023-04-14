@@ -30,8 +30,8 @@ def plot_importances(result, relevance):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--input-file", type=str, default="arne/output/results_concat.pkl")
-    parser.add_argument("--output-dir", type=str, default="arne/plot")
+    parser.add_argument("--input-file", type=str, default="output/importances.pkl")
+    parser.add_argument("--output-dir", type=str, default="plot")
     args = parser.parse_args()
 
     if not os.path.isdir(args.output_dir):
@@ -40,7 +40,6 @@ if __name__ == "__main__":
     result = joblib.load(args.input_file)
     for relevance in result.keys():
         fig, ax = plot_importances(result, relevance)
-        rel_str = f"{relevance:.2f}".replace(".", "")[1:]
 
         fig.savefig(os.path.join(
-            args.output_dir, f"importances_{rel_str}.png"))
+            args.output_dir, f"importances_{relevance}.png"))

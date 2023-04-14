@@ -231,7 +231,8 @@ def cross_val_shrinkage(
     n_splits=5,
     score_fn="balanced_accuracy",
     n_jobs=-1,
-    verbose=0
+    verbose=0,
+    return_param_values=True
 ):
     cv = KFold(n_splits=n_splits, shuffle=True)
     shrink_modes = param_grid["shrink_mode"]
@@ -292,7 +293,9 @@ def cross_val_shrinkage(
                 for i in param_range
             ]
         )
-    return scores, param_shrink_mode, param_lmb
+    if return_param_values:
+        return scores, param_shrink_mode, param_lmb
+    return scores
 
 
 if __name__ == "__main__":
