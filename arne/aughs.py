@@ -42,7 +42,7 @@ def _check_fit_arguments(
 
 def _normalize_value(dt, node):
     if isinstance(dt, RegressorMixin):
-        return dt.tree_.value[node, :, :]
+        return deepcopy(dt.tree_.value[node, :, :])
     # Normalize to probability vector
     return dt.tree_.value[node, :, :] / dt.tree_.n_node_samples[node]
 
@@ -79,6 +79,7 @@ class ShrinkageEstimator(BaseEstimator):
         left = dt.tree_.children_left[node]
         right = dt.tree_.children_right[node]
         feature = dt.tree_.feature[node]
+        threshold = dt.tree_.threshold[node]
 
         if entropies is None:
             entropies = np.zeros(len(dt.tree_.n_node_samples))
@@ -91,10 +92,12 @@ class ShrinkageEstimator(BaseEstimator):
             entropies[node] = scipy.stats.entropy(counts)
             cardinalities[node] = len(counts)
 
+            X_train_left = X_train[split_feature <= threshold]
+            X_train_right = X_train[split_feature > threshold]
+
             # Recursively compute entropy and cardinality of the children
-            # TODO split train data into left and right
-            self._compute_node_entropies(dt, X_train, left, entropies, cardinalities)
-            self._compute_node_entropies(dt, X_train, right, entropies, cardinalities)
+            self._compute_node_entropies(dt, X_train_left, left, entropies, cardinalities)
+            self._compute_node_entropies(dt, X_train_right, right, entropies, cardinalities)
         return entropies, cardinalities
 
     def _shrink_tree_rec(
