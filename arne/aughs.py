@@ -42,7 +42,7 @@ def _check_fit_arguments(
 
 def _normalize_value(dt, node):
     if isinstance(dt, RegressorMixin):
-        return dt.tree_.value[node, :, :]
+        return deepcopy(dt.tree_.value[node, :, :])
     # Normalize to probability vector
     return dt.tree_.value[node, :, :] / dt.tree_.n_node_samples[node]
 
