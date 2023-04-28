@@ -6,7 +6,7 @@ import numpy as np
 from datetime import datetime
 
 
-def plot_scores(result, relevance):
+def plot_scores(result, relevance, ylabel="Accuracy"):
     colors = ['blue', 'red', 'green', 'orange']
     fig, ax = plt.subplots()
     scores = result[relevance]
@@ -24,12 +24,12 @@ def plot_scores(result, relevance):
     ax.set_title(f"Relevance: {relevance}")
     ax.set_xticks(np.arange(6), [0.1, 1.0, 10.0, 25.0, 50.0, 100.0])
     ax.set_xlabel("$\lambda$")
-    ax.set_ylabel("Accuracy")
+    ax.set_ylabel(ylabel)
     return fig, ax
 
 
 if __name__ == "__main__":
-    input_file = "output" + datetime.now().strftime("-%Y-%m-%d") + "/scores.pkl"
+    input_file = "output" + datetime.now().strftime("-%Y-%m-%d") + "/""scores.pkl"""
     output_dir = "plot" + datetime.now().strftime("-%Y-%m-%d")
     parser = argparse.ArgumentParser()
     parser.add_argument("--input-file", type=str, default=input_file)
