@@ -3,6 +3,7 @@ import joblib
 import argparse
 from matplotlib import pyplot as plt
 import numpy as np
+from datetime import datetime
 
 
 def plot_scores(result, relevance):
@@ -28,9 +29,11 @@ def plot_scores(result, relevance):
 
 
 if __name__ == "__main__":
+    input_file = "output" + datetime.now().strftime("-%Y-%m-%d") + "/scores.pkl"
+    output_dir = "plot" + datetime.now().strftime("-%Y-%m-%d")
     parser = argparse.ArgumentParser()
-    parser.add_argument("--input-file", type=str, default="output/scores.pkl")
-    parser.add_argument("--output-dir", type=str, default="plot")
+    parser.add_argument("--input-file", type=str, default=input_file)
+    parser.add_argument("--output-dir", type=str, default=output_dir)
     args = parser.parse_args()
 
     if not os.path.isdir(args.output_dir):

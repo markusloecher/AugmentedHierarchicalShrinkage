@@ -196,7 +196,7 @@ class ShrinkageEstimator(BaseEstimator):
         self.shrink()
 
     def _validate_arguments(self, X, y, feature_names):
-        if self.shrink_mode not in ["hs", "hs_entropy", "hs_log_cardinality"]:
+        if self.shrink_mode not in ["hs", "hs_entropy", "hs_log_cardinality", "hs_global_entropy"]:
             raise ValueError("Invalid choice for shrink_mode")
         X, y, feature_names = _check_fit_arguments(X, y, feature_names=feature_names)
         self.n_features_in_ = X.shape[1]

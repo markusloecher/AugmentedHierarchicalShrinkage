@@ -3,6 +3,7 @@ import os
 import joblib
 import argparse
 import numpy as np
+from datetime import datetime
 
 
 def set_box_color(bp, color):
@@ -29,9 +30,12 @@ def plot_importances(result, relevance):
     return fig, ax
 
 if __name__ == "__main__":
+    input_file = "output" + datetime.now().strftime("-%Y-%m-%d") + "/importances.pkl"
+    output_dir = "plot" + datetime.now().strftime("-%Y-%m-%d")
+
     parser = argparse.ArgumentParser()
-    parser.add_argument("--input-file", type=str, default="output/importances.pkl")
-    parser.add_argument("--output-dir", type=str, default="plot")
+    parser.add_argument("--input-file", type=str, default=input_file)
+    parser.add_argument("--output-dir", type=str, default=output_dir)
     args = parser.parse_args()
 
     if not os.path.isdir(args.output_dir):

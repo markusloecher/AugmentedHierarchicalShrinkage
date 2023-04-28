@@ -11,7 +11,7 @@ from argparse import ArgumentParser
 import joblib
 import os
 from datetime import datetime
-
+import time
 
 def simulate_categorical(n_samples: int, relevance: float):
     X = np.zeros((n_samples, 5))
@@ -30,19 +30,21 @@ def simulate_categorical(n_samples: int, relevance: float):
 
 
 def run_experiment(lambdas, relevances, shrink_modes, clf_type="rf", 
-                   score_fn = "AUC", n_samples=1000):
+                   score_fn = "AUC", n_samples=1000, verbose=True):
     relevances_str = ["{:.2f}".format(rel)[2:] for rel in relevances]
     result_importances = {rel: {sm: None for sm in shrink_modes}
                           for rel in relevances_str}
     result_scores = {rel: {sm: None for sm in shrink_modes}
                       for rel in relevances_str}
     for i, relevance in enumerate(relevances):
+        if verbose:
+            print("run_experiment, relevance=", relevance)
         rel_str = relevances_str[i]
         X, y = simulate_categorical(n_samples, relevance)
 
         # Compute importances for classical RF/DT
         if clf_type == "rf":
-            clf = RandomForestClassifier().fit(X, y)
+            clf = RandomForestClassifier(n_jobs=5).fit(X, y)
         elif clf_type == "dt":
             clf = DecisionTreeClassifier().fit(X, y)
         else:
@@ -98,9 +100,9 @@ if __name__ == "__main__":
     parser.add_argument("--score-fn", type=str,
                         default="AUC")
     parser.add_argument("--test-run", type=str,
-                        default="yes")
+                        default="no")
     parser.add_argument("--n-samples", type=int, default=1000)
-    parser.add_argument("--n-jobs", type=int, default=-1)
+    parser.add_argument("--n-jobs", type=int, default=8)
     args = parser.parse_args()
 
     lambdas = [0.1, 1.0, 10.0, 25.0, 50.0, 100.0]
@@ -111,18 +113,21 @@ if __name__ == "__main__":
         print("running a quick test")
         lambdas = [0.1, 1.0]
         relevances = [ 0.1]
-        shrink_modes = ["hs"]
+        shrink_modes = ["hs_global_entropy"]
         args.n_replications = 1
         args.clf_type="dt"
         args.n_samples=100
 
-    
     relevances_str = ["{:.2f}".format(rel)[2:] for rel in relevances]
+
+    start = time.time()
+
     results = joblib.Parallel(n_jobs=args.n_jobs, verbose=10)(
         joblib.delayed(run_experiment)(lambdas, relevances, shrink_modes,
                                        args.clf_type, args.score_fn, args.n_samples)
         for _ in range(args.n_replications))
-    
+    end = time.time()
+    print("run_experiment took:", end - start)
     # Gather all results
     importances = {
         rel: {
