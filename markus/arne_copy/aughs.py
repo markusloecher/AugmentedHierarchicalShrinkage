@@ -19,6 +19,7 @@ from sklearn.metrics import (
     accuracy_score,
     mean_absolute_error,
     r2_score,
+    roc_auc_score
 )
 from joblib import Parallel, delayed
 
@@ -42,7 +43,7 @@ def _check_fit_arguments(
 
 def _normalize_value(dt, node):
     if isinstance(dt, RegressorMixin):
-        return dt.tree_.value[node, :, :]
+        return deepcopy(dt.tree_.value[node, :, :])
     # Normalize to probability vector
     return dt.tree_.value[node, :, :] / dt.tree_.n_node_samples[node]
 
@@ -79,6 +80,7 @@ class ShrinkageEstimator(BaseEstimator):
         left = dt.tree_.children_left[node]
         right = dt.tree_.children_right[node]
         feature = dt.tree_.feature[node]
+        threshold = dt.tree_.threshold[node]
 
         if entropies is None:
             entropies = np.zeros(len(dt.tree_.n_node_samples))
@@ -91,10 +93,12 @@ class ShrinkageEstimator(BaseEstimator):
             entropies[node] = scipy.stats.entropy(counts)
             cardinalities[node] = len(counts)
 
+            X_train_left = X_train[split_feature <= threshold]
+            X_train_right = X_train[split_feature > threshold]
+
             # Recursively compute entropy and cardinality of the children
-            # TODO split train data into left and right
-            self._compute_node_entropies(dt, X_train, left, entropies, cardinalities)
-            self._compute_node_entropies(dt, X_train, right, entropies, cardinalities)
+            self._compute_node_entropies(dt, X_train_left, left, entropies, cardinalities)
+            self._compute_node_entropies(dt, X_train_right, right, entropies, cardinalities)
         return entropies, cardinalities
 
     def _shrink_tree_rec(
@@ -123,6 +127,10 @@ class ShrinkageEstimator(BaseEstimator):
                 if self.shrink_mode == "hs_entropy":
                     # Entropy-based shrinkage
                     entropy = self.entropies_[dt_idx][parent_node]
+                    reg = 1 + (self.lmb * entropy / parent_num_samples)
+                elif self.shrink_mode == "hs_global_entropy":
+                    # Entropy-based shrinkage
+                    entropy = self.entropies_[dt_idx][0]
                     reg = 1 + (self.lmb * entropy / parent_num_samples)
                 elif self.shrink_mode == "hs_log_cardinality":
                     # Cardinality-based shrinkage
@@ -271,6 +279,10 @@ def cross_val_shrinkage(
             elif score_fn == "mae":
                 scores.append(
                     mean_absolute_error(y_test, shrinkage_estimator.predict(X_test))
+                )
+            elif score_fn == "AUC":
+                scores.append(
+                    roc_auc_score(y_test, shrinkage_estimator.predict_proba(X_test)[:,1])
                 )
             else:
                 raise ValueError("Invalid score function")

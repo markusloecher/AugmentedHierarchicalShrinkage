@@ -9,7 +9,8 @@ from aughs import ShrinkageClassifier, cross_val_shrinkage
 from tqdm import trange
 from argparse import ArgumentParser
 import joblib
-
+import os
+from datetime import datetime
 
 
 def simulate_categorical(n_samples: int, relevance: float):
@@ -28,7 +29,8 @@ def simulate_categorical(n_samples: int, relevance: float):
     return X, y
 
 
-def run_experiment(lambdas, relevances, shrink_modes, clf_type="rf"):
+def run_experiment(lambdas, relevances, shrink_modes, clf_type="rf", 
+                   score_fn = "AUC", n_samples=1000):
     relevances_str = ["{:.2f}".format(rel)[2:] for rel in relevances]
     result_importances = {rel: {sm: None for sm in shrink_modes}
                           for rel in relevances_str}
@@ -36,7 +38,7 @@ def run_experiment(lambdas, relevances, shrink_modes, clf_type="rf"):
                       for rel in relevances_str}
     for i, relevance in enumerate(relevances):
         rel_str = relevances_str[i]
-        X, y = simulate_categorical(1000, relevance)
+        X, y = simulate_categorical(n_samples, relevance)
 
         # Compute importances for classical RF/DT
         if clf_type == "rf":
@@ -55,11 +57,11 @@ def run_experiment(lambdas, relevances, shrink_modes, clf_type="rf"):
         else:
             raise ValueError("Unknown classifier type")
 
-        for shrink_mode in ["hs", "hs_entropy", "hs_log_cardinality"]:
+        for shrink_mode in shrink_modes:#["hs", "hs_entropy", "hs_log_cardinality"]:
             param_grid = {"shrink_mode": [shrink_mode], "lmb": lambdas}
             lmb_scores = cross_val_shrinkage(
-                hsc, X, y, param_grid, n_splits=5, n_jobs=1,
-                return_param_values=False)
+                hsc, X, y, param_grid, n_splits=5, score_fn = score_fn, 
+                n_jobs=1, return_param_values=False)
             result_scores[rel_str][shrink_mode] = lmb_scores
             best_idx = np.argmax(lmb_scores)
             best_lmb = lambdas[best_idx]
@@ -67,6 +69,23 @@ def run_experiment(lambdas, relevances, shrink_modes, clf_type="rf"):
             result_importances[rel_str][shrink_mode] = hsc.estimator_.feature_importances_
     return result_importances, result_scores
 
+
+def CreateFilePath(fullFilePath, addDate = False):
+    fileInfos = os.path.split(os.path.abspath(fullFilePath))
+    fname = fileInfos[1]
+    out_path = fileInfos[0]
+
+    if addDate:
+        out_path = out_path + datetime.now().strftime("-%Y-%m-%d")
+    
+    try:
+        if not os.path.exists(out_path):
+            os.makedirs(out_path)
+    except:
+        print("could not create", out_path)
+
+    return out_path + "/"+fname
+    
 
 if __name__ == "__main__":
     parser = ArgumentParser()
@@ -76,17 +95,32 @@ if __name__ == "__main__":
     parser.add_argument("--clf-type", type=str, default="rf")
     parser.add_argument("--scores-file", type=str,
                         default="output/scores.pkl")
+    parser.add_argument("--score-fn", type=str,
+                        default="AUC")
+    parser.add_argument("--test-run", type=str,
+                        default="yes")
+    parser.add_argument("--n-samples", type=int, default=1000)
     parser.add_argument("--n-jobs", type=int, default=-1)
     args = parser.parse_args()
 
     lambdas = [0.1, 1.0, 10.0, 25.0, 50.0, 100.0]
     relevances = [0., 0.05, 0.1, 0.15, 0.2]
-    relevances_str = ["{:.2f}".format(rel)[2:] for rel in relevances]
-    shrink_modes = ["hs", "hs_entropy", "hs_log_cardinality"]
+    shrink_modes = ["hs", "hs_entropy", "hs_log_cardinality", "hs_global_entropy"]
 
+    if args.test_run == "yes":
+        print("running a quick test")
+        lambdas = [0.1, 1.0]
+        relevances = [ 0.1]
+        shrink_modes = ["hs"]
+        args.n_replications = 1
+        args.clf_type="dt"
+        args.n_samples=100
+
+    
+    relevances_str = ["{:.2f}".format(rel)[2:] for rel in relevances]
     results = joblib.Parallel(n_jobs=args.n_jobs, verbose=10)(
         joblib.delayed(run_experiment)(lambdas, relevances, shrink_modes,
-                                       args.clf_type)
+                                       args.clf_type, args.score_fn, args.n_samples)
         for _ in range(args.n_replications))
     
     # Gather all results
@@ -118,5 +152,8 @@ if __name__ == "__main__":
             scores[rel][mode] = np.array(scores[rel][mode])
 
     # Save to disk
-    joblib.dump(importances, args.importances_file)
-    joblib.dump(scores, args.scores_file)
+    fname_imp = CreateFilePath(args.importances_file, addDate =True)
+    fname_scores = CreateFilePath(args.scores_file, addDate =True)
+
+    joblib.dump(importances, fname_imp)
+    joblib.dump(scores, fname_scores)
