@@ -43,8 +43,8 @@ def run_experiment(lambdas, relevances, shrink_modes, clf_type="rf",
         X, y = simulate_categorical(n_samples, relevance)
 
         # Compute importances for classical RF/DT
-        if clf_type == "rf":
-            clf = RandomForestClassifier(n_jobs=5).fit(X, y)
+        if clf_type == "rf":#n_jobs=5
+            clf = RandomForestClassifier().fit(X, y)
         elif clf_type == "dt":
             clf = DecisionTreeClassifier().fit(X, y)
         else:
@@ -97,6 +97,8 @@ if __name__ == "__main__":
     parser.add_argument("--clf-type", type=str, default="rf")
     parser.add_argument("--scores-file", type=str,
                         default="output/scores.pkl")
+    parser.add_argument("--pars-file", type=str,
+                        default="output/params.pkl")
     parser.add_argument("--score-fn", type=str,
                         default="AUC")
     parser.add_argument("--test-run", type=str,
@@ -156,9 +158,17 @@ if __name__ == "__main__":
         for mode in shrink_modes:
             scores[rel][mode] = np.array(scores[rel][mode])
 
+    #scores_with_type = {}
+    #scores_with_type[args.score_fn] = scores
+    pars = {"n_samples" : args.n_samples,
+            "clf_type" : args.clf_type,
+            "score_fn" : args.score_fn}
+     
     # Save to disk
     fname_imp = CreateFilePath(args.importances_file, addDate =True)
     fname_scores = CreateFilePath(args.scores_file, addDate =True)
+    fname_pars = CreateFilePath(args.pars_file, addDate =True)
 
     joblib.dump(importances, fname_imp)
     joblib.dump(scores, fname_scores)
+    joblib.dump(pars, fname_pars)
