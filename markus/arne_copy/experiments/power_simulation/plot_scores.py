@@ -35,7 +35,7 @@ if __name__ == "__main__":
 
 
     parser = argparse.ArgumentParser()
-    parser.add_argument("--par-file", type=str, default=par_file)
+    parser.add_argument("--pars-file", type=str, default=par_file)
     parser.add_argument("--input-file", type=str, default=input_file)
     parser.add_argument("--output-dir", type=str, default=output_dir)
     parser.add_argument("--scores-ylabel", type=str, default="AUC")
