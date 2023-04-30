@@ -1,5 +1,6 @@
 from StroblSimFuns import *
 import argparse
+from argparse import ArgumentParser
 
 
 if __name__ == "__main__":
@@ -99,7 +100,7 @@ if args.plot_dir != None:
         os.makedirs(output_dir_scores)
     
     result = scores
-    print("scores shape:", result["00"]["hs"].shape)
+    print("scores shape:", result[relevances_str[0]][shrink_modes[0]].shape)
     for relevance in result.keys():
         fig, ax = plot_scores(result, relevance, args.scores_ylabel)
 
@@ -112,7 +113,7 @@ if args.plot_dir != None:
         os.makedirs(output_dir_imp)
     
     result = importances
-    print("importances shape:", result["00"]["hs"].shape)
+    print("importances shape:", result[relevances_str[0]][shrink_modes[0]].shape)
     for relevance in result.keys():
         fig, ax = plot_importances(result, relevance)
 
