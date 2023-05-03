@@ -11,8 +11,6 @@ if __name__ == "__main__":
     parser.add_argument("--clf-type", type=str, default="rf")
     parser.add_argument("--scores-file", type=str,
                         default="output/scores.pkl")
-    parser.add_argument("--lambdas-file", type=str,
-                        default="output/bestlambdas.pkl")
     parser.add_argument("--pars-file", type=str,
                         default="output/params.pkl")
     parser.add_argument("--score-fn", type=str,
@@ -26,8 +24,8 @@ if __name__ == "__main__":
     parser.add_argument("--plot-dir", type=str, default="plots")
     args = parser.parse_args()
 
-    lambdas = [1.0, 5, 10.0, 25.0, 50.0, 100.0, 150, 200]
-    relevances = [0., 0.1, 0.2]#[0., 0.05, 0.1, 0.15, 0.2]
+    lambdas = [0.1, 1.0, 10.0, 25.0, 50.0, 100.0]
+    relevances = [0., 0.05, 0.1, 0.15, 0.2]
     shrink_modes = ["hs", "hs_entropy", "hs_log_cardinality", "hs_global_entropy"]
 
     if args.test_run == "yes":
@@ -51,35 +49,25 @@ if __name__ == "__main__":
     end = time.time()
     print("run_experiment took:", end - start)
     # Gather all results
-    # importances = {
-    #     rel: {
-    #         mode: [] for mode in shrink_modes + ["no_shrinkage"]}
-    #     for rel in relevances_str
-    # }
+    importances = {
+        rel: {
+            mode: [] for mode in shrink_modes + ["no_shrinkage"]}
+        for rel in relevances_str
+    }
 
-    # scores = {
-    #     rel: {
-    #         mode: [] for mode in shrink_modes}
-    #     for rel in relevances_str
-    # }
-
-    # best_lambdas = {
-    #     rel: {
-    #         mode: [] for mode in shrink_modes}
-    #     for rel in relevances_str
-    # }
-    importances = InitDictionary(shrink_modes, relevances_str)
-    scores = InitDictionary(shrink_modes, relevances_str)
-    best_lambdas = InitDictionary(shrink_modes, relevances_str)
+    scores = {
+        rel: {
+            mode: [] for mode in shrink_modes}
+        for rel in relevances_str
+    }
 
     # Concatenate results
-    for result_importances, result_scores, result_lambdas in results:
+    for result_importances, result_scores in results:
         for rel in relevances_str:
             for mode in shrink_modes + ["no_shrinkage"]:
                 importances[rel][mode].append(result_importances[rel][mode])
             for mode in shrink_modes:
                 scores[rel][mode].append(result_scores[rel][mode])
-                best_lambdas[rel][mode].append(result_lambdas[rel][mode])
     
     # Convert to numpy arrays
     for rel in relevances_str:
@@ -87,7 +75,6 @@ if __name__ == "__main__":
             importances[rel][mode] = np.array(importances[rel][mode])
         for mode in shrink_modes:
             scores[rel][mode] = np.array(scores[rel][mode])
-            best_lambdas[rel][mode] = np.array(best_lambdas[rel][mode])
 
     #scores_with_type = {}
     #scores_with_type[args.score_fn] = scores
@@ -99,12 +86,10 @@ if __name__ == "__main__":
     # Save to disk
     out_path_imp, fname_imp = CreateFilePath(args.importances_file, addDate =True)
     out_path_scores,fname_scores = CreateFilePath(args.scores_file, addDate =True)
-    out_path_lambdas,fname_lambdas = CreateFilePath(args.lambdas_file, addDate =True)
     out_path_pars, fname_pars = CreateFilePath(args.pars_file, addDate =True)
 
     joblib.dump(importances, out_path_imp+fname_imp)
     joblib.dump(scores, out_path_scores+fname_scores)
-    joblib.dump(best_lambdas, out_path_lambdas+fname_lambdas)
     joblib.dump(pars, out_path_pars+fname_pars)
 
 
