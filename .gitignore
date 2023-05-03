@@ -20,3 +20,4 @@ data/**/*.gz
 **/nohup.out
 *.pdf
 .python-version
+#markus/arne_copy/experiments/power_simulation/results/

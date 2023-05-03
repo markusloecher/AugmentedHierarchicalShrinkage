@@ -53,6 +53,9 @@ def run_experiment(lambdas, relevances, shrink_modes, clf_type="rf",
                           for rel in relevances_str}
     result_scores = {rel: {sm: None for sm in shrink_modes}
                       for rel in relevances_str}
+    result_lambdas = {rel: {sm: None for sm in shrink_modes}
+                      for rel in relevances_str}
+    
     for i, relevance in enumerate(relevances):
         if verbose:
             print("run_experiment, relevance=", relevance)
@@ -67,6 +70,7 @@ def run_experiment(lambdas, relevances, shrink_modes, clf_type="rf",
         else:
             raise ValueError("Unknown classifier type")
         result_importances[rel_str]["no_shrinkage"] = clf.feature_importances_
+        result_lambdas[rel_str]["no_shrinkage"] = 0
 
         # Compute importances for different HS modes
         if clf_type == "rf":
@@ -86,7 +90,9 @@ def run_experiment(lambdas, relevances, shrink_modes, clf_type="rf",
             best_lmb = lambdas[best_idx]
             hsc.set_shrink_params(shrink_mode=shrink_mode, lmb=best_lmb)
             result_importances[rel_str][shrink_mode] = hsc.estimator_.feature_importances_
-    return result_importances, result_scores
+            result_lambdas[rel_str][shrink_mode] = best_lmb
+
+    return result_importances, result_scores, result_lambdas
 
 
 def CreateFilePath(fullFilePath, addDate = False):
@@ -149,3 +155,11 @@ def plot_scores(result, relevance, ylabel="Accuracy"):
     ax.set_xlabel("$\lambda$")
     ax.set_ylabel(ylabel)
     return fig, ax
+
+def InitDictionary(shrink_modes, relevances_str):
+    importances = {
+        rel: {
+            mode: [] for mode in shrink_modes + ["no_shrinkage"]}
+        for rel in relevances_str
+    }
+    return importances
