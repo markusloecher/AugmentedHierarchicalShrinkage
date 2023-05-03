@@ -15,7 +15,7 @@ import time
 from matplotlib import pyplot as plt
 
 
-def simulate_categorical(n_samples: int, relevance: float):
+def simulate_Strobl(n_samples: int, relevance: float):
     X = np.zeros((n_samples, 5))
     X[:, 0] = np.random.normal(0, 1, n_samples)
     n_categories = [2, 4, 10, 20]
@@ -30,6 +30,20 @@ def simulate_categorical(n_samples: int, relevance: float):
         1, 0.5 + relevance, np.sum(X[:, 1] == 1))
     return X, y
 
+def simulate_Wright_Nembrini(n_samples: int, relevance: float):
+    X = np.zeros((n_samples, 5))
+    X[:, 0] = np.random.normal(0, 1, n_samples)
+    n_categories = [2, 4, 10, 20]
+    for i in range(1, 5):
+        X[:, i] = np.random.choice(
+            a=n_categories[i-1], size=n_samples,
+            p=np.ones(n_categories[i - 1]) / n_categories[i - 1])
+    y = np.zeros(n_samples)
+    y[X[:, 1] == 0] = np.random.binomial(
+        1, 0.5 - relevance, np.sum(X[:, 1] == 0))
+    y[X[:, 1] == 1] = np.random.binomial(
+        1, 0.5 + relevance, np.sum(X[:, 1] == 1))
+    return X, y
 
 def run_experiment(lambdas, relevances, shrink_modes, clf_type="rf", 
                    score_fn = "AUC", n_samples=1000, 
@@ -43,7 +57,7 @@ def run_experiment(lambdas, relevances, shrink_modes, clf_type="rf",
         if verbose:
             print("run_experiment, relevance=", relevance)
         rel_str = relevances_str[i]
-        X, y = simulate_categorical(n_samples, relevance)
+        X, y = simulate_Strobl(n_samples, relevance)
 
         # Compute importances for classical RF/DT
         if clf_type == "rf":#n_jobs=5
