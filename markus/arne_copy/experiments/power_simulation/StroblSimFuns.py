@@ -13,7 +13,16 @@ import os
 from datetime import datetime
 import time
 from matplotlib import pyplot as plt
+from shap import TreeExplainer, summary_plot
 
+
+def InitDictionary(shrink_modes, relevances_str):
+    importances = {
+        rel: {
+            mode: [] for mode in shrink_modes }
+        for rel in relevances_str
+    }
+    return importances
 
 def simulate_Strobl(n_samples: int, relevance: float):
     X = np.zeros((n_samples, 5))
@@ -49,12 +58,17 @@ def run_experiment(lambdas, relevances, shrink_modes, clf_type="rf",
                    score_fn = "AUC", n_samples=1000, 
                    max_depth=None , verbose=True):
     relevances_str = ["{:.2f}".format(rel)[2:] for rel in relevances]
-    result_importances = {rel: {sm: None for sm in shrink_modes}
-                          for rel in relevances_str}
-    result_scores = {rel: {sm: None for sm in shrink_modes}
-                      for rel in relevances_str}
-    result_lambdas = {rel: {sm: None for sm in shrink_modes}
-                      for rel in relevances_str}
+    
+    result_importances = InitDictionary(shrink_modes, relevances_str)
+    result_scores = InitDictionary(shrink_modes, relevances_str)
+    result_lambdas = InitDictionary(shrink_modes, relevances_str)
+
+    # result_importances = {rel: {sm: None for sm in shrink_modes}
+    #                       for rel in relevances_str}
+    # result_scores = {rel: {sm: None for sm in shrink_modes}
+    #                   for rel in relevances_str}
+    # result_lambdas = {rel: {sm: None for sm in shrink_modes}
+    #                   for rel in relevances_str}
     
     for i, relevance in enumerate(relevances):
         if verbose:
@@ -159,10 +173,9 @@ def plot_scores(result, relevance, lambdas = [0.1, 1.0, 10.0, 25.0, 50.0, 100.0]
     ax.set_ylabel(ylabel)
     return fig, ax
 
-def InitDictionary(shrink_modes, relevances_str):
-    importances = {
-        rel: {
-            mode: [] for mode in shrink_modes }
-        for rel in relevances_str
-    }
-    return importances
+def generate_SHAP(X_train, X_test, feature_names, model):
+    explainer = TreeExplainer(model, X_train)
+    shap_values = np.array(explainer.shap_values(X_test))
+    summary_plot(shap_values[0, ...], features=X_test, feature_names=feature_names, show=False)
+    fig = plt.gcf()
+    return fig

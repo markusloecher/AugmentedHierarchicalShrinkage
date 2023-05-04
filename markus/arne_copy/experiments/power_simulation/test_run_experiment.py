@@ -46,7 +46,7 @@ if __name__ == "__main__":
     end = time.time()
     print("run_experiment took:", end - start)
     
-    importances = InitDictionary(shrink_modes, relevances_str)
+    importances = InitDictionary(shrink_modes + ["no_shrinkage"], relevances_str)
     scores = InitDictionary(shrink_modes, relevances_str)
     best_lambdas = InitDictionary(shrink_modes, relevances_str)
 
