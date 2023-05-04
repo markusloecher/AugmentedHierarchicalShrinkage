@@ -135,11 +135,14 @@ def plot_importances(result, relevance):
     ax.set_xticks(np.arange(5), ["X1", "X2", "X3", "X4", "X5"])
     return fig, ax
 
-def plot_scores(result, relevance, ylabel="Accuracy"):
+def plot_scores(result, relevance, lambdas = [0.1, 1.0, 10.0, 25.0, 50.0, 100.0], 
+                ylabel="Accuracy"):
     colors = ['blue', 'red', 'green', 'orange']
     fig, ax = plt.subplots()
     scores = result[relevance]
     for i, key in enumerate(scores.keys()):
+        #print(i,key)
+        #try:
         # Make line plot averaging over rows
         ax.plot(np.mean(scores[key], axis=0), label=key, c=colors[i])
         # Plot confidence interval
@@ -151,7 +154,7 @@ def plot_scores(result, relevance, ylabel="Accuracy"):
     
     ax.legend()
     ax.set_title(f"Relevance: {relevance}")
-    ax.set_xticks(np.arange(6), [0.1, 1.0, 10.0, 25.0, 50.0, 100.0])
+    ax.set_xticks(np.arange(len(lambdas)), lambdas)
     ax.set_xlabel("$\lambda$")
     ax.set_ylabel(ylabel)
     return fig, ax
@@ -159,7 +162,7 @@ def plot_scores(result, relevance, ylabel="Accuracy"):
 def InitDictionary(shrink_modes, relevances_str):
     importances = {
         rel: {
-            mode: [] for mode in shrink_modes + ["no_shrinkage"]}
+            mode: [] for mode in shrink_modes }
         for rel in relevances_str
     }
     return importances

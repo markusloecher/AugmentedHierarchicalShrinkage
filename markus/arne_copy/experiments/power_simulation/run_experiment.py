@@ -38,6 +38,7 @@ if __name__ == "__main__":
         args.n_replications = 1
         args.clf_type="dt"
         args.n_samples=100
+        args.plot_dir = None
 
     relevances_str = ["{:.2f}".format(rel)[2:] for rel in relevances]
 
@@ -51,24 +52,8 @@ if __name__ == "__main__":
     end = time.time()
     print("run_experiment took:", end - start)
     # Gather all results
-    # importances = {
-    #     rel: {
-    #         mode: [] for mode in shrink_modes + ["no_shrinkage"]}
-    #     for rel in relevances_str
-    # }
-
-    # scores = {
-    #     rel: {
-    #         mode: [] for mode in shrink_modes}
-    #     for rel in relevances_str
-    # }
-
-    # best_lambdas = {
-    #     rel: {
-    #         mode: [] for mode in shrink_modes}
-    #     for rel in relevances_str
-    # }
-    importances = InitDictionary(shrink_modes, relevances_str)
+   
+    importances = InitDictionary(shrink_modes+ ["no_shrinkage"], relevances_str)
     scores = InitDictionary(shrink_modes, relevances_str)
     best_lambdas = InitDictionary(shrink_modes, relevances_str)
 
@@ -92,6 +77,7 @@ if __name__ == "__main__":
     #scores_with_type = {}
     #scores_with_type[args.score_fn] = scores
     pars = {"n_samples" : args.n_samples,
+            "lambdas" : lambdas,
             "clf_type" : args.clf_type,
             "score_fn" : args.score_fn,
             "max_depth": args.max_depth}
@@ -117,7 +103,7 @@ if args.plot_dir != None:
     result = scores
     print("scores shape:", result[relevances_str[0]][shrink_modes[0]].shape)
     for relevance in result.keys():
-        fig, ax = plot_scores(result, relevance, args.scores_ylabel)
+        fig, ax = plot_scores(result, relevance, lambdas, args.scores_ylabel)
 
         fig.savefig(os.path.join(
             output_dir_scores, f"scores_{relevance}.png"))
