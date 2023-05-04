@@ -19,7 +19,7 @@ if __name__ == "__main__":
                         default="AUC")
     parser.add_argument("--test-run", type=str,
                         default="no")
-    parser.add_argument("--n-samples", type=int, default=1000)
+    parser.add_argument("--n-samples", type=int, default=200)
     parser.add_argument("--max-depth", type=int, default=None)
     parser.add_argument("--n-jobs", type=int, default=8)
     parser.add_argument("--scores-ylabel", type=str, default="AUC")
@@ -77,6 +77,7 @@ if __name__ == "__main__":
     #scores_with_type = {}
     #scores_with_type[args.score_fn] = scores
     pars = {"n_samples" : args.n_samples,
+            "n_replications" : args.n_replications,
             "lambdas" : lambdas,
             "clf_type" : args.clf_type,
             "score_fn" : args.score_fn,

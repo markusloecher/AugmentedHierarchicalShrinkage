@@ -62,7 +62,7 @@ def run_experiment(lambdas, relevances, shrink_modes, clf_type="rf",
     result_importances = InitDictionary(shrink_modes, relevances_str)
     result_scores = InitDictionary(shrink_modes, relevances_str)
     result_lambdas = InitDictionary(shrink_modes, relevances_str)
-
+    result_shap  = InitDictionary(shrink_modes, relevances_str + "no_shrinkage")
     # result_importances = {rel: {sm: None for sm in shrink_modes}
     #                       for rel in relevances_str}
     # result_scores = {rel: {sm: None for sm in shrink_modes}
@@ -75,6 +75,7 @@ def run_experiment(lambdas, relevances, shrink_modes, clf_type="rf",
             print("run_experiment, relevance=", relevance)
         rel_str = relevances_str[i]
         X, y = simulate_Strobl(n_samples, relevance)
+        X_test, y_test = simulate_Strobl(n_samples, relevance)
 
         # Compute importances for classical RF/DT
         if clf_type == "rf":#n_jobs=5
@@ -84,7 +85,7 @@ def run_experiment(lambdas, relevances, shrink_modes, clf_type="rf",
         else:
             raise ValueError("Unknown classifier type")
         result_importances[rel_str]["no_shrinkage"] = clf.feature_importances_
-        result_lambdas[rel_str]["no_shrinkage"] = 0
+        result_lambdas[rel_str]["no_shrinkage"] = 0 
 
         # Compute importances for different HS modes
         if clf_type == "rf":
@@ -93,6 +94,13 @@ def run_experiment(lambdas, relevances, shrink_modes, clf_type="rf",
             hsc = ShrinkageClassifier(DecisionTreeClassifier(max_depth=max_depth))
         else:
             raise ValueError("Unknown classifier type")
+        
+        param_grid = {"shrink_mode": ["hs"], "lmb": [0]}
+        lmb_scores = cross_val_shrinkage(
+                hsc, X, y, param_grid, n_splits=5, score_fn = "AUC", 
+                n_jobs=1, return_param_values=False)
+        hsc.set_shrink_params(shrink_mode="hs", lmb=0)
+        result_shap[rel_str]["no_shrinkage"] = generate_SHAP(X, X_test, hsc.estimator_)
 
         for shrink_mode in shrink_modes:#["hs", "hs_entropy", "hs_log_cardinality"]:
             param_grid = {"shrink_mode": [shrink_mode], "lmb": lambdas}
@@ -105,8 +113,9 @@ def run_experiment(lambdas, relevances, shrink_modes, clf_type="rf",
             hsc.set_shrink_params(shrink_mode=shrink_mode, lmb=best_lmb)
             result_importances[rel_str][shrink_mode] = hsc.estimator_.feature_importances_
             result_lambdas[rel_str][shrink_mode] = best_lmb
+            result_shap[rel_str][shrink_mode] = generate_SHAP(X, X_test, hsc.estimator_)
 
-    return result_importances, result_scores, result_lambdas
+    return result_importances, result_scores, result_lambdas, result_shap
 
 
 def CreateFilePath(fullFilePath, addDate = False):
@@ -133,7 +142,7 @@ def set_box_color(bp, color):
     plt.setp(bp['medians'], color=color)
 
 
-def plot_importances(result, relevance, ylabel = "MDI"):
+def plot_importances(result, relevance):
     colors = ['blue', 'red', 'green', 'orange', 'purple']
     fig, ax = plt.subplots()
     importances = result[relevance]
@@ -146,7 +155,6 @@ def plot_importances(result, relevance, ylabel = "MDI"):
 
     ax.legend()
     ax.set_title(f"Relevance: {relevance}")
-    ax.set_ylabel(ylabel)
     ax.set_xticks(np.arange(5), ["X1", "X2", "X3", "X4", "X5"])
     return fig, ax
 
@@ -179,49 +187,3 @@ def generate_SHAP(X_train, X_test, model):
     shap_values = np.array(explainer.shap_values(X_test))
     global_shap = np.sum(np.abs(shap_values[0,:,:]),axis=0)
     return global_shap
-
-def compute_shap(best_lambdas, relevances, shrink_modes,
-                  clf_type, n_samples,max_depth, verbose=1):
-    
-    relevances_str = ["{:.2f}".format(rel)[2:] for rel in relevances]
-    
-    result_shap  = InitDictionary(shrink_modes, relevances_str + ["no_shrinkage"])
-
-    for i, relevance in enumerate(relevances):
-        rel_str = relevances_str[i]
-        
-        if verbose>0:
-            print("run_shap, relevance=", relevance, rel_str)
-        
-        X, y = simulate_Strobl(n_samples, relevance)
-        X_test, y_test = simulate_Strobl(n_samples, relevance)
-        
-        if clf_type == "rf":#n_jobs=5
-            clf = RandomForestClassifier(max_depth=max_depth).fit(X, y)
-        elif clf_type == "dt":
-            clf = DecisionTreeClassifier(max_depth=max_depth).fit(X, y)
-        else:
-            raise ValueError("Unknown classifier type")
-        result_shap[rel_str]["no_shrinkage"] = generate_SHAP(X, X_test, clf)
-
-        for shrink_mode in shrink_modes:#["hs", "hs_entropy", "hs_log_cardinality"]:
-            lmb = np.round(np.mean(best_lambdas[rel_str][shrink_mode]))
-            if verbose>1:
-                print("lambda=", lmb)
-            if clf_type == "rf":
-                hsc = ShrinkageClassifier(RandomForestClassifier(max_depth=max_depth), 
-                            lmb=lmb, shrink_mode=shrink_mode)
-            elif clf_type == "dt":
-                hsc = ShrinkageClassifier(DecisionTreeClassifier(max_depth=max_depth),
-                            lmb=lmb, shrink_mode=shrink_mode)
-            if verbose>1:
-                print("fitting with shrink_mode=", shrink_mode)
-            
-            hsc.fit(X,y)
-            #hsc.set_shrink_params(shrink_mode=shrink_mode,lmb=lmb)
-            
-            result_shap[rel_str][shrink_mode] = generate_SHAP(X, X_test, hsc.estimator_)
-            if verbose>1:
-                print("shap:", result_shap[rel_str][shrink_mode])
-
-    return result_shap
