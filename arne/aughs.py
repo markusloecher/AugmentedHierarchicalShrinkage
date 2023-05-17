@@ -96,8 +96,12 @@ class ShrinkageEstimator(BaseEstimator):
             X_train_right = X_train[split_feature > threshold]
 
             # Recursively compute entropy and cardinality of the children
-            self._compute_node_entropies(dt, X_train_left, left, entropies, cardinalities)
-            self._compute_node_entropies(dt, X_train_right, right, entropies, cardinalities)
+            self._compute_node_entropies(
+                dt, X_train_left, left, entropies, cardinalities
+            )
+            self._compute_node_entropies(
+                dt, X_train_right, right, entropies, cardinalities
+            )
         return entropies, cardinalities
 
     def _shrink_tree_rec(
@@ -116,7 +120,7 @@ class ShrinkageEstimator(BaseEstimator):
         if parent_node is None:
             cum_sum = value
         else:
-            # If not root: update cum_sum based on the value of the current 
+            # If not root: update cum_sum based on the value of the current
             # node and the parent node
             reg = 1
             if self.shrink_mode == "hs":
@@ -176,7 +180,7 @@ class ShrinkageEstimator(BaseEstimator):
         else:  # Single tree
             self._shrink_tree_rec(self.estimator_, 0)
 
-    def set_shrink_params(self, shrink_mode=None, lmb=None):
+    def reshrink(self, shrink_mode=None, lmb=None):
         if shrink_mode is not None:
             self.shrink_mode = shrink_mode
         if lmb is not None:
@@ -232,11 +236,13 @@ def cross_val_shrinkage(
     y,
     param_grid,
     n_splits=5,
-    score_fn="balanced_accuracy",
+    score_fn=None,  # Default: balanced_accuracy_score
     n_jobs=-1,
     verbose=0,
-    return_param_values=True
+    return_param_values=True,
 ):
+    if score_fn is None:
+        score_fn = balanced_accuracy_score
     cv = KFold(n_splits=n_splits, shuffle=True)
     shrink_modes = param_grid["shrink_mode"]
     lmbs = param_grid["lmb"]
@@ -249,53 +255,73 @@ def cross_val_shrinkage(
             param_shrink_mode.append(shrink_mode)
             param_lmb.append(lmb)
 
-    def _single_setting(shrink_mode, lmb):
-        scores = []
-        for train_index, test_index in cv.split(X):
-            X_train, X_test = X[train_index], X[test_index]
-            y_train, y_test = y[train_index], y[test_index]
+    def _train_model(estimator, train_index):
+        """
+        Helper function to train the base model for a single fold.
+        """
+        X_train, y_train = X[train_index], y[train_index]
+        estimator.fit(X_train, y_train)
+        return deepcopy(estimator)
 
-            shrinkage_estimator.fit(X_train, y_train)
-            shrinkage_estimator.set_shrink_params(shrink_mode=shrink_mode, lmb=lmb)
-            if score_fn == "balanced_accuracy":
-                scores.append(
-                    balanced_accuracy_score(y_test, shrinkage_estimator.predict(X_test))
-                )
-            elif score_fn == "accuracy":
-                scores.append(
-                    accuracy_score(y_test, shrinkage_estimator.predict(X_test))
-                )
-            elif score_fn == "r2":
-                scores.append(r2_score(y_test, shrinkage_estimator.predict(X_test)))
-            elif score_fn == "mse":
-                scores.append(
-                    mean_squared_error(y_test, shrinkage_estimator.predict(X_test))
-                )
-            elif score_fn == "mae":
-                scores.append(
-                    mean_absolute_error(y_test, shrinkage_estimator.predict(X_test))
-                )
-            else:
-                raise ValueError("Invalid score function")
+    def _single_setting(shrink_mode, lmb, fold_models):
+        """
+        Helper function to evaluate the performance of a single setting of the
+        shrinkage parameters, on all folds.
+        """
+        scores = []
+        for i, (_, test_index) in enumerate(cv.split(X)):
+            X_test = X[test_index]
+            y_test = y[test_index]
+
+            estimator = fold_models[i]
+            estimator.reshrink(shrink_mode=shrink_mode, lmb=lmb)
+            scores.append(score_fn(y_test, estimator.predict(X_test)))
         return np.mean(scores)
 
+    # Train a model on each fold in parallel
+    if verbose != 0:
+        print("Training base models...")
+    fold_models = []
+    if n_jobs != 1:
+        with Parallel(n_jobs=n_jobs, verbose=verbose) as parallel:
+            fold_models = parallel(
+                delayed(_train_model)(shrinkage_estimator, train_index)
+                for train_index, _ in cv.split(X)
+            )
+    else:
+        for train_index, _ in tqdm(cv.split(X)) if verbose == 1 else cv.split(X):
+            fold_models.append(_train_model(shrinkage_estimator, train_index))
+    if verbose != 0:
+        print("Done.")
+
+    # Evaluate all settings in parallel
+    if verbose != 0:
+        print("Evaluating settings...")
     if n_jobs != 1:
         with Parallel(n_jobs=n_jobs, verbose=verbose) as parallel:
             scores = np.array(
                 parallel(
-                    delayed(_single_setting)(param_shrink_mode[i], param_lmb[i])
+                    delayed(_single_setting)(
+                        param_shrink_mode[i], param_lmb[i], fold_models
+                    )
                     for i in range(len(param_shrink_mode))
                 )
             )
     else:
-        param_range = range(len(param_shrink_mode)) if verbose == 0 else tqdm(
-            range(len(param_shrink_mode)))
+        param_range = (
+            range(len(param_shrink_mode))
+            if verbose == 0
+            else tqdm(range(len(param_shrink_mode)))
+        )
         scores = np.array(
             [
-                _single_setting(param_shrink_mode[i], param_lmb[i])
+                _single_setting(param_shrink_mode[i], param_lmb[i], fold_models)
                 for i in param_range
             ]
         )
+    if verbose != 0:
+        print("Done.")
+
     if return_param_values:
         return scores, param_shrink_mode, param_lmb
     return scores
