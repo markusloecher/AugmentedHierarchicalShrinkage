@@ -21,7 +21,7 @@ def plot_scores(result, relevance):
     
     ax.legend()
     ax.set_title(f"Relevance: {relevance}")
-    ax.set_xticks(np.arange(6), [0.1, 1.0, 10.0, 25.0, 50.0, 100.0])
+    ax.set_xticks(np.arange(7), [0., 0.1, 1.0, 10.0, 25.0, 50.0, 100.0])
     ax.set_xlabel("$\lambda$")
     ax.set_ylabel("Accuracy")
     return fig, ax

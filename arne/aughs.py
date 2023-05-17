@@ -14,11 +14,7 @@ from sklearn.utils.validation import check_X_y, check_is_fitted
 from sklearn.utils.estimator_checks import check_estimator
 from sklearn.model_selection import KFold
 from sklearn.metrics import (
-    mean_squared_error,
-    balanced_accuracy_score,
-    accuracy_score,
-    mean_absolute_error,
-    r2_score,
+    roc_auc_score,
 )
 from joblib import Parallel, delayed
 
@@ -242,8 +238,8 @@ def cross_val_shrinkage(
     return_param_values=True,
 ):
     if score_fn is None:
-        score_fn = balanced_accuracy_score
-    cv = KFold(n_splits=n_splits, shuffle=True)
+        score_fn = roc_auc_score
+    cv = KFold(n_splits=n_splits, shuffle=True, random_state=0)
     shrink_modes = param_grid["shrink_mode"]
     lmbs = param_grid["lmb"]
 
@@ -257,11 +253,11 @@ def cross_val_shrinkage(
 
     def _train_model(estimator, train_index):
         """
-        Helper function to train the base model for a single fold.
+        Helper function to train the base model for a single train-test split.
         """
         X_train, y_train = X[train_index], y[train_index]
         estimator.fit(X_train, y_train)
-        return deepcopy(estimator)
+        return estimator
 
     def _single_setting(shrink_mode, lmb, fold_models):
         """
@@ -281,16 +277,18 @@ def cross_val_shrinkage(
     # Train a model on each fold in parallel
     if verbose != 0:
         print("Training base models...")
-    fold_models = []
+    fold_models = [clone(shrinkage_estimator) for _ in range(n_splits)]
     if n_jobs != 1:
         with Parallel(n_jobs=n_jobs, verbose=verbose) as parallel:
-            fold_models = parallel(
-                delayed(_train_model)(shrinkage_estimator, train_index)
-                for train_index, _ in cv.split(X)
+            parallel(
+                delayed(_train_model)(fold_models[i], train_index)
+                for i, (train_index, _) in enumerate(cv.split(X))
             )
     else:
-        for train_index, _ in tqdm(cv.split(X)) if verbose == 1 else cv.split(X):
-            fold_models.append(_train_model(shrinkage_estimator, train_index))
+        gen = enumerate(tqdm(cv.split(X))) if verbose == 1\
+              else enumerate(cv.split(X))
+        for i, (train_index, _) in gen:
+            fold_models[i] = _train_model(fold_models[i], train_index)
     if verbose != 0:
         print("Done.")
 

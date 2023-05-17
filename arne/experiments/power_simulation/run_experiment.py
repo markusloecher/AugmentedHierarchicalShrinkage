@@ -84,18 +84,17 @@ def run_experiment(lambdas, relevances, shrink_modes, clf_type="rf", verbose=0):
 
 if __name__ == "__main__":
     parser = ArgumentParser()
-    parser.add_argument("--n-replications", type=int, default=1)
+    parser.add_argument("--n-replications", type=int, default=8)
     parser.add_argument(
         "--importances-file", type=str, default="output/importances.pkl"
     )
     parser.add_argument("--clf-type", type=str, default="rf")
     parser.add_argument("--scores-file", type=str, default="output/scores.pkl")
-    parser.add_argument("--n-jobs", type=int, default=1)
-    parser.add_argument("--verbose", type=int, default=0)
+    parser.add_argument("--n-jobs", type=int, default=8)
+    parser.add_argument("--verbose", type=int, default=10)
     args = parser.parse_args()
 
-    # lambdas = [0., 0.1, 1.0, 10.0, 25.0, 50.0, 100.0]
-    lambdas = [50.0, 100.0]
+    lambdas = [0., 0.1, 1.0, 10.0, 25.0, 50.0, 100.0]
     relevances = [0.0, 0.05, 0.1, 0.15, 0.2]
     relevances_str = ["{:.2f}".format(rel)[2:] for rel in relevances]
     shrink_modes = ["hs", "hs_entropy", "hs_log_cardinality"]
