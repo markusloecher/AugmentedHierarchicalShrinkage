@@ -6,9 +6,10 @@ import numpy as np
 
 
 def plot_scores(result, relevance):
-    colors = ['blue', 'red', 'green', 'orange']
+    colors = ['blue', 'red', 'green', 'orange', 'purple']
     fig, ax = plt.subplots()
     scores = result[relevance]
+    print(scores.keys())
     for i, key in enumerate(scores.keys()):
         # Make line plot averaging over rows
         ax.plot(np.mean(scores[key], axis=0), label=key, c=colors[i])
@@ -21,7 +22,7 @@ def plot_scores(result, relevance):
     
     ax.legend()
     ax.set_title(f"Relevance: {relevance}")
-    ax.set_xticks(np.arange(6), [0.1, 1.0, 10.0, 25.0, 50.0, 100.0])
+    ax.set_xticks(np.arange(7), [0., 0.1, 1.0, 10.0, 25.0, 50.0, 100.0])
     ax.set_xlabel("$\lambda$")
     ax.set_ylabel("Accuracy")
     return fig, ax
