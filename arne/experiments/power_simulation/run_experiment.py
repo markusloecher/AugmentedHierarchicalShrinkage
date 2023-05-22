@@ -55,7 +55,7 @@ def run_experiment(lambdas, relevances, shrink_modes, clf_type="rf", verbose=0):
             raise ValueError("Unknown classifier type")
 
         # Handle each shrinkage mode separately
-        for shrink_mode in ["hs", "hs_entropy", "hs_log_cardinality"]:
+        for shrink_mode in shrink_modes:
             # Perform grid search for best value of lambda
             param_grid = {"shrink_mode": [shrink_mode], "lmb": lambdas}
             lmb_scores = cross_val_shrinkage(
@@ -88,7 +88,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--importances-file", type=str, default="output/importances.pkl"
     )
-    parser.add_argument("--clf-type", type=str, default="rf")
+    parser.add_argument("--clf-type", type=str, default="dt")
     parser.add_argument("--scores-file", type=str, default="output/scores.pkl")
     parser.add_argument("--n-jobs", type=int, default=8)
     parser.add_argument("--verbose", type=int, default=10)
@@ -97,7 +97,7 @@ if __name__ == "__main__":
     lambdas = [0., 0.1, 1.0, 10.0, 25.0, 50.0, 100.0]
     relevances = [0.0, 0.05, 0.1, 0.15, 0.2]
     relevances_str = ["{:.2f}".format(rel)[2:] for rel in relevances]
-    shrink_modes = ["hs", "hs_entropy", "hs_log_cardinality"]
+    shrink_modes = ["hs", "hs_entropy", "hs_log_cardinality", "hs_permutation"]
 
     if args.n_jobs != 1:
         results = joblib.Parallel(n_jobs=args.n_jobs, verbose=args.verbose)(
@@ -121,7 +121,9 @@ if __name__ == "__main__":
         for rel in relevances_str
     }
 
-    scores = {rel: {mode: [] for mode in shrink_modes} for rel in relevances_str}
+    scores = {
+        rel: {mode: [] for mode in shrink_modes}
+        for rel in relevances_str}
 
     # Concatenate results
     for result_importances, result_scores in results:

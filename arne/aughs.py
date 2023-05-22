@@ -51,6 +51,60 @@ def _update_tree_values(dt, value, node):
     dt.tree_.impurity[node] = 1 - np.sum(np.power(value, 2))
     # assert not np.isnan(dt.tree_.impurity[node]), "Impurity is NaN"
 
+def _gini(y):
+    _, counts = np.unique(y, return_counts=True)
+    return 1 - np.sum(np.power(counts / len(y), 2))
+
+def _entropy(y):
+    _, counts = np.unique(y, return_counts=True)
+    return scipy.stats.entropy(counts)
+
+
+def _impurity_reduction(criterion_fn, y_train, y_left, y_right):
+    return (
+        len(y_left) * criterion_fn(y_left)
+        + len(y_right) * criterion_fn(y_right)
+        - len(y_train) * criterion_fn(y_train)
+    )
+    
+def _compute_alpha(X_train, y_train, feature, threshold, criterion):
+    # Compute impurity reduction of the split
+    split_feature = X_train[:, feature]
+    y_left = y_train[split_feature <= threshold]
+    y_right = y_train[split_feature > threshold]
+    criterion_fn = {
+        "gini": _gini,
+        "entropy": _entropy,
+        "log_loss": _entropy,  # Log loss and entropy are the same
+        "squared_error": lambda y: np.var(y),
+        "friedman_mse": lambda y: np.var(y),  # TODO
+        "absolute_error": lambda y: np.mean(np.abs(y - np.median(y))),
+        "poisson": lambda y: np.var(y)  # TODO
+    }[criterion]
+
+    orig_impurity_reduction = _impurity_reduction(
+        criterion_fn, y_train, y_left, y_right)
+
+    # Compute best impurity reduction of a random split
+    # Shuffle the labels
+    y_train_shuffled = np.random.permutation(y_train)
+
+    # For each threshold
+    thresholds = np.unique(split_feature)
+    best_impurity_reduction = -np.inf
+    for threshold in thresholds:
+        # Compute impurity reduction of the split
+        y_left = y_train_shuffled[split_feature <= threshold]
+        y_right = y_train_shuffled[split_feature > threshold]
+        impurity_reduction = _impurity_reduction(
+            criterion_fn, y_train_shuffled, y_left, y_right)
+        if impurity_reduction > best_impurity_reduction:
+            best_impurity_reduction = impurity_reduction
+    
+    # Compute alpha
+    alpha = 1 - best_impurity_reduction / orig_impurity_reduction
+    return np.max(alpha, 0) + 1e-4
+
 
 class ShrinkageEstimator(BaseEstimator):
     def __init__(
@@ -59,46 +113,82 @@ class ShrinkageEstimator(BaseEstimator):
         shrink_mode: str = "hs",
         lmb: float = 1,
         random_state=None,
+        compute_all_values=True
     ):
         self.base_estimator = base_estimator
         self.shrink_mode = shrink_mode
         self.lmb = lmb
         self.random_state = random_state
+        self.compute_all_values = compute_all_values
 
     @abstractmethod
     def get_default_estimator(self):
         raise NotImplemented
 
-    def _compute_node_entropies(
-        self, dt, X_train, node=0, entropies=None, cardinalities=None
+    def _compute_node_values_rec(
+        self, dt, X_train, y_train, node=0, entropies=None, 
+        log_cardinalities=None, alphas=None
     ):
+        """
+        Compute the entropy of each node in the tree.
+        These values are used in the entropy-based shrinkage.
+        Note that if shrink_mode is "hs_permutation", the returned values
+        are not technically "entropies", but rather the $\alpha$ values
+        used in the permutation-based shrinkage.
+        """
         left = dt.tree_.children_left[node]
         right = dt.tree_.children_right[node]
         feature = dt.tree_.feature[node]
         threshold = dt.tree_.threshold[node]
+        criterion = dt.criterion
 
         if entropies is None:
             entropies = np.zeros(len(dt.tree_.n_node_samples))
-            cardinalities = np.zeros(len(dt.tree_.n_node_samples))
+            log_cardinalities = np.zeros(len(dt.tree_.n_node_samples))
+            alphas = np.zeros(len(dt.tree_.n_node_samples))
 
-        # If not leaf node, compute entropy and cardinality of the node
+        # If not leaf node, compute entropy, cardinality, and alpha of the node
         if not (left == -1 and right == -1):
             split_feature = X_train[:, feature]
             _, counts = np.unique(split_feature, return_counts=True)
+
             entropies[node] = scipy.stats.entropy(counts)
-            cardinalities[node] = len(counts)
+            log_cardinalities[node] = np.log(len(counts))
+            alphas[node] = _compute_alpha(
+                X_train, y_train, feature, threshold, criterion
+            )
 
             X_train_left = X_train[split_feature <= threshold]
             X_train_right = X_train[split_feature > threshold]
+            y_train_left = y_train[split_feature <= threshold]
+            y_train_right = y_train[split_feature > threshold]
 
             # Recursively compute entropy and cardinality of the children
-            self._compute_node_entropies(
-                dt, X_train_left, left, entropies, cardinalities
-            )
-            self._compute_node_entropies(
-                dt, X_train_right, right, entropies, cardinalities
-            )
-        return entropies, cardinalities
+            self._compute_node_values_rec(dt, X_train_left, y_train_left, 
+                                         left, entropies, log_cardinalities,
+                                         alphas)
+            self._compute_node_values_rec(dt, X_train_right, y_train_right,
+                                         right, entropies, log_cardinalities,
+                                         alphas)
+        return entropies, log_cardinalities, alphas
+    
+    def _compute_node_values(self, X, y):
+        self.entropies_ = []
+        self.log_cardinalities_ = []
+        self.alphas_ = []
+        if hasattr(self.estimator_, "estimators_"):  # Random Forest
+            for estimator in self.estimator_.estimators_:
+                entropies, log_cardinalities, alphas = \
+                    self._compute_node_values_rec(estimator, X, y)
+                self.entropies_.append(entropies)
+                self.log_cardinalities_.append(log_cardinalities)
+                self.alphas_.append(alphas)
+        else:  # Single tree
+            entropies, log_cardinalities, alphas = \
+                self._compute_node_values_rec(self.estimator_, X, y)
+            self.entropies_.append(entropies)
+            self.log_cardinalities_.append(log_cardinalities)
+            self.alphas_.append(alphas)
 
     def _shrink_tree_rec(
         self, dt, dt_idx, node=0, parent_node=None, parent_val=None, cum_sum=None
@@ -123,15 +213,18 @@ class ShrinkageEstimator(BaseEstimator):
                 # Classic hierarchical shrinkage
                 reg = 1 + (self.lmb / parent_num_samples)
             else:
+                # Adaptive shrinkage
                 if self.shrink_mode == "hs_entropy":
-                    # Entropy-based shrinkage
-                    entropy = self.entropies_[dt_idx][parent_node]
-                    reg = 1 + (self.lmb * entropy / parent_num_samples)
+                    node_value = self.entropies_[dt_idx][parent_node]
                 elif self.shrink_mode == "hs_log_cardinality":
-                    # Cardinality-based shrinkage
-                    cardinality = self.cardinalities_[dt_idx][parent_node]
-                    reg = 1 + (self.lmb * np.log(cardinality) / parent_num_samples)
+                    node_value = self.log_cardinalities_[dt_idx][parent_node]
+                elif self.shrink_mode == "hs_permutation":
+                    node_value = self.alphas_[dt_idx][parent_node]
+                else:
+                    raise ValueError(f"Unknown shrink mode: {self.shrink_mode}")
+                reg = 1 + (self.lmb * node_value / parent_num_samples)
             cum_sum += (value - parent_val) / reg
+
         _update_tree_values(dt, cum_sum, node)
         # If not leaf: recurse
         if not (left == -1 and right == -1):
@@ -152,18 +245,8 @@ class ShrinkageEstimator(BaseEstimator):
         # Save a copy of the original estimator
         self.orig_estimator_ = deepcopy(self.estimator_)
 
-        # Compute node entropies
-        self.entropies_ = []
-        self.cardinalities_ = []
-        if hasattr(self.estimator_, "estimators_"):  # Random Forest
-            for estimator in self.estimator_.estimators_:
-                entropies, cardinalities = self._compute_node_entropies(estimator, X)
-                self.entropies_.append(entropies)
-                self.cardinalities_.append(cardinalities)
-        else:  # Single tree
-            entropies, cardinalities = self._compute_node_entropies(self.estimator_, X)
-            self.entropies_.append(entropies)
-            self.cardinalities_.append(cardinalities)
+        # Compute node values (entropy, log cardinality, alpha)
+        self._compute_node_values(X, y)
 
         # Apply hierarchical shrinkage
         self.shrink()
@@ -181,8 +264,6 @@ class ShrinkageEstimator(BaseEstimator):
             self.shrink_mode = shrink_mode
         if lmb is not None:
             self.lmb = lmb
-        if not hasattr(self, "entropies_"):
-            raise ValueError("Cannot set shrinkage parameters before fitting")
 
         # Reset the estimator to the original one
         self.estimator_ = deepcopy(self.orig_estimator_)
@@ -191,7 +272,8 @@ class ShrinkageEstimator(BaseEstimator):
         self.shrink()
 
     def _validate_arguments(self, X, y, feature_names):
-        if self.shrink_mode not in ["hs", "hs_entropy", "hs_log_cardinality"]:
+        if self.shrink_mode not in ["hs", "hs_entropy", "hs_log_cardinality", 
+                                    "hs_permutation"]:
             raise ValueError("Invalid choice for shrink_mode")
         X, y, feature_names = _check_fit_arguments(X, y, feature_names=feature_names)
         self.n_features_in_ = X.shape[1]
@@ -269,7 +351,7 @@ def cross_val_shrinkage(
             X_test = X[test_index]
             y_test = y[test_index]
 
-            estimator = fold_models[i]
+            estimator = deepcopy(fold_models[i])
             estimator.reshrink(shrink_mode=shrink_mode, lmb=lmb)
             scores.append(score_fn(y_test, estimator.predict(X_test)))
         return np.mean(scores)
