@@ -94,16 +94,22 @@ def _compute_alpha(X_train, y_train, feature, threshold, criterion):
     best_impurity_reduction = -np.inf
     for threshold in thresholds:
         # Compute impurity reduction of the split
-        y_left = y_train_shuffled[split_feature <= threshold]
-        y_right = y_train_shuffled[split_feature > threshold]
+        left_coords = split_feature <= threshold
+        y_left = y_train_shuffled[left_coords]
+        y_right = y_train_shuffled[~left_coords]
         impurity_reduction = _impurity_reduction(
             criterion_fn, y_train_shuffled, y_left, y_right)
         if impurity_reduction > best_impurity_reduction:
             best_impurity_reduction = impurity_reduction
     
     # Compute alpha
+    # Adding \epsilon to both terms to prevent extreme values of alpha
+    best_impurity_reduction = best_impurity_reduction + 1e-4
+    orig_impurity_reduction = orig_impurity_reduction + 1e-4
     alpha = 1 - best_impurity_reduction / orig_impurity_reduction
-    return np.max(alpha, 0) + 1e-4
+    # Also adding \epsilon to alpha itself, since it will be used as a 
+    # denominator
+    return np.maximum(alpha, 0) + 1e-4
 
 
 class ShrinkageEstimator(BaseEstimator):
@@ -152,16 +158,17 @@ class ShrinkageEstimator(BaseEstimator):
             split_feature = X_train[:, feature]
             _, counts = np.unique(split_feature, return_counts=True)
 
-            entropies[node] = scipy.stats.entropy(counts)
+            entropies[node] = np.maximum(scipy.stats.entropy(counts), 1)
             log_cardinalities[node] = np.log(len(counts))
             alphas[node] = _compute_alpha(
                 X_train, y_train, feature, threshold, criterion
             )
 
-            X_train_left = X_train[split_feature <= threshold]
-            X_train_right = X_train[split_feature > threshold]
-            y_train_left = y_train[split_feature <= threshold]
-            y_train_right = y_train[split_feature > threshold]
+            left_rows = split_feature <= threshold
+            X_train_left = X_train[left_rows]
+            X_train_right = X_train[~left_rows]
+            y_train_left = y_train[left_rows]
+            y_train_right = y_train[~left_rows]
 
             # Recursively compute entropy and cardinality of the children
             self._compute_node_values_rec(dt, X_train_left, y_train_left, 
@@ -219,7 +226,7 @@ class ShrinkageEstimator(BaseEstimator):
                 elif self.shrink_mode == "hs_log_cardinality":
                     node_value = self.log_cardinalities_[dt_idx][parent_node]
                 elif self.shrink_mode == "hs_permutation":
-                    node_value = self.alphas_[dt_idx][parent_node]
+                    node_value = 1 / self.alphas_[dt_idx][parent_node]
                 else:
                     raise ValueError(f"Unknown shrink mode: {self.shrink_mode}")
                 reg = 1 + (self.lmb * node_value / parent_num_samples)
