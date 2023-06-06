@@ -92,7 +92,7 @@ def _compute_alpha(X_train, y_train, feature, threshold, criterion):
     # For each threshold
     thresholds = np.unique(split_feature)
     best_impurity_reduction = -np.inf
-    for threshold in thresholds:
+    for threshold in thresholds[:-1]:
         # Compute impurity reduction of the split
         left_coords = split_feature <= threshold
         y_left = y_train_shuffled[left_coords]
@@ -321,7 +321,7 @@ def cross_val_shrinkage(
     y,
     param_grid,
     n_splits=5,
-    score_fn=None,  # Default: balanced_accuracy_score
+    score_fn=None,  # Default: roc_auc_score
     n_jobs=-1,
     verbose=0,
     return_param_values=True,

@@ -9,6 +9,7 @@ from aughs import ShrinkageClassifier, cross_val_shrinkage
 from tqdm import trange
 from argparse import ArgumentParser
 import joblib
+from sklearn.metrics import roc_auc_score
 
 
 def simulate_data(n_samples: int, relevance: float):
@@ -64,6 +65,7 @@ def run_experiment(lambdas, relevances, shrink_modes, clf_type="rf", verbose=0):
                 y,
                 param_grid,
                 n_splits=5,
+                score_fn=roc_auc_score,
                 n_jobs=1,
                 return_param_values=False,
                 verbose=verbose,
