@@ -33,58 +33,56 @@ REG_DATASETS = [
 ]
 
 
-def plot_results(results, lambdas, ds_name, problem_type):
-        # Put results into a single dict of np arrays
-        # shrink_mode -> [n_lambdas, n_replications]
-        scores = {sm: [] for sm in ["hs", "hs_entropy", "hs_log_cardinality"]}
-        no_shrinkage_scores = []
-        for result in results:
-            for shrink_mode in ["hs", "hs_entropy", "hs_log_cardinality"]:
-                scores[shrink_mode].append(result[0][shrink_mode])
-            no_shrinkage_scores.append(result[1])
-        for sm in scores:
-            scores[sm] = np.array(scores[sm])
-        no_shrinkage_scores = np.array(no_shrinkage_scores)
-        
-        # Plot results
-        plt.figure(figsize=(10, 6))
-        for sm in scores:
-            avg = np.mean(scores[sm], axis=0)
-            std = np.std(scores[sm], axis=0)
-            n = scores[sm].shape[0]
-            conf = 1.96 * std / np.sqrt(n)
-            plt.plot(lambdas, avg, label=sm)
-            plt.fill_between(
-                lambdas,
-                avg - conf,
-                avg + conf,
-                alpha=0.2,
-            )
-        avg_no_shrinkage = np.mean(no_shrinkage_scores).repeat(len(lambdas))
-        std_no_shrinkage = np.std(no_shrinkage_scores).repeat(len(lambdas))
-        n_no_shrinkage = no_shrinkage_scores.shape[0]
-        conf_no_shrinkage = 1.96 * std_no_shrinkage / np.sqrt(n_no_shrinkage)
+def plot_results(results, lambdas, ds_name, problem_type, shrink_modes):
+    # Put results into a single dict of np arrays
+    # shrink_mode -> [n_lambdas, n_replications]
+    scores = {sm: [] for sm in shrink_modes}
+    no_shrinkage_scores = []
+    for result in results:
+        for shrink_mode in shrink_modes:
+            scores[shrink_mode].append(result[0][shrink_mode])
+        no_shrinkage_scores.append(result[1])
+    for sm in scores:
+        scores[sm] = np.array(scores[sm])
+    no_shrinkage_scores = np.array(no_shrinkage_scores)
 
-        plt.plot(lambdas, avg_no_shrinkage, label="No shrinkage")
+    # Plot results
+    plt.figure(figsize=(10, 6))
+    for sm in scores:
+        avg = np.mean(scores[sm], axis=0)
+        std = np.std(scores[sm], axis=0)
+        n = scores[sm].shape[0]
+        conf = 1.96 * std / np.sqrt(n)
+        plt.plot(lambdas, avg, label=sm)
         plt.fill_between(
             lambdas,
-            avg_no_shrinkage - conf_no_shrinkage,
-            avg_no_shrinkage + conf_no_shrinkage,
+            avg - conf,
+            avg + conf,
             alpha=0.2,
         )
+    avg_no_shrinkage = np.mean(no_shrinkage_scores).repeat(len(lambdas))
+    std_no_shrinkage = np.std(no_shrinkage_scores).repeat(len(lambdas))
+    n_no_shrinkage = no_shrinkage_scores.shape[0]
+    conf_no_shrinkage = 1.96 * std_no_shrinkage / np.sqrt(n_no_shrinkage)
 
-        plt.legend()
-        plt.xscale("log")
-        plt.xlabel("Lambda")
-        if problem_type == "regression":
-            plt.ylabel("MSE")
-        elif problem_type == "classification":
-            plt.ylabel("ROC AUC")
-        plt.title(ds_name)
-        plt.savefig(f"{args.out_dir}/{ds_name}.png")
-        plt.close()
+    plt.plot(lambdas, avg_no_shrinkage, label="No shrinkage")
+    plt.fill_between(
+        lambdas,
+        avg_no_shrinkage - conf_no_shrinkage,
+        avg_no_shrinkage + conf_no_shrinkage,
+        alpha=0.2,
+    )
 
-        
+    plt.legend()
+    plt.xscale("log")
+    plt.xlabel("Lambda")
+    if problem_type == "regression":
+        plt.ylabel("MSE")
+    elif problem_type == "classification":
+        plt.ylabel("ROC AUC")
+    plt.title(ds_name)
+    plt.savefig(f"{args.out_dir}/{ds_name}.png")
+    plt.close()
 
 
 def single_rep(
@@ -137,6 +135,12 @@ def single_rep(
 
 
 if __name__ == "__main__":
+    all_shrinkage_types = [
+        "hs",
+        "hs_entropy",
+        "hs_log_cardinality",
+        "hs_permutation",
+    ]
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "--model-type", type=str, default="dt", choices=["dt", "rf"]
@@ -144,6 +148,13 @@ if __name__ == "__main__":
     parser.add_argument("--n-jobs", type=int, default=8)
     parser.add_argument("--n-replications", type=int, default=8)
     parser.add_argument("--out-dir", type=str, default="out")
+    parser.add_argument(
+        "--shrink-modes",
+        type=str,
+        nargs="+",
+        choices=all_shrinkage_types,
+        default=["hs_permutation"],
+    )
     args = parser.parse_args()
 
     lambdas = [0.0, 0.1, 1.0, 10.0, 25.0, 50.0, 100.0]
@@ -171,15 +182,17 @@ if __name__ == "__main__":
                 X,
                 y,
                 base_estimator,
-                ["hs", "hs_entropy", "hs_log_cardinality"],
+                args.shrink_modes,
                 lambdas,
                 "classification",
                 roc_auc_score,
             )
             for _ in range(args.n_replications)
         )
-        plot_results(results, lambdas, ds_name, "classification")
-    
+        plot_results(
+            results, lambdas, ds_name, "classification", args.shrink_modes
+        )
+
     ##############
     # REGRESSION #
     ##############
@@ -189,7 +202,7 @@ if __name__ == "__main__":
             base_estimator = DecisionTreeRegressor()
         elif args.model_type == "rf":
             base_estimator = RandomForestRegressor()
-        
+
         X, y, feature_names = get_clean_dataset(ds_id, ds_source)
 
         # results is a list of results from single_rep:
@@ -199,11 +212,11 @@ if __name__ == "__main__":
                 X,
                 y,
                 base_estimator,
-                ["hs", "hs_entropy", "hs_log_cardinality"],
+                args.shrink_modes,
                 lambdas,
                 "regression",
                 mean_squared_error,
             )
             for _ in range(args.n_replications)
         )
-        plot_results(results, lambdas, ds_name, "regression")
+        plot_results(results, lambdas, ds_name, "regression", args.shrink_modes)
