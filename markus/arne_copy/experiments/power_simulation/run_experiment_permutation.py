@@ -26,9 +26,9 @@ if __name__ == "__main__":
     parser.add_argument("--plot-dir", type=str, default="plots")
     args = parser.parse_args()
 
-    lambdas = [1.0, 5, 10.0, 25.0, 50.0, 100.0, 150, 200]
-    relevances = [0., 0.1, 0.2]#[0., 0.05, 0.1, 0.15, 0.2]
-    shrink_modes = ["hs", "hs_entropy", "hs_log_cardinality", "hs_global_entropy"]
+    lambdas = [5,25]#[1.0, 5, 10.0, 25.0, 50.0, 100.0, 150, 200]
+    relevances = [0.2]#[0., 0.05, 0.1, 0.15, 0.2]
+    shrink_modes = [ "hs_permutation"]
 
     if args.test_run == "yes":
         print("running a quick test")
