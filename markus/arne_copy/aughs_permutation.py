@@ -109,6 +109,7 @@ def _compute_alpha(X_train, y_train, feature, threshold, criterion):
     alpha = 1 - best_impurity_reduction / orig_impurity_reduction
     # Also adding \epsilon to alpha itself, since it will be used as a 
     # denominator
+    
     return np.maximum(alpha, 0) + 1e-4
 
 
@@ -163,7 +164,10 @@ class ShrinkageEstimator(BaseEstimator):
             alphas[node] = _compute_alpha(
                 X_train, y_train, feature, threshold, criterion
             )
-
+            f=open('alphas.dat','ab')
+            a = np.array([node, feature, alphas[node]])
+            np.savetxt(f,a)
+            f.close()
             left_rows = split_feature <= threshold
             X_train_left = X_train[left_rows]
             X_train_right = X_train[~left_rows]
