@@ -12,7 +12,9 @@ import pandas as pd
 
 # Get the data
 X = pd.read_csv("OMICS.txt","\t")
+X = np.array(X)
 y = pd.read_csv("omics_target.txt","\t")
+y = np.array(y).ravel()
 
 # Compute importances for classical RF/DT
 clf = RandomForestClassifier().fit(X, y)
