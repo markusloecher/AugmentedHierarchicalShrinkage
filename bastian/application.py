@@ -1,5 +1,5 @@
 import sys
-sys.path.append("../arne/")
+#sys.path.append("../arne/")
 
 import numpy as np
 from sklearn.ensemble import RandomForestClassifier
@@ -23,7 +23,10 @@ FI_no_shrinkage = clf.feature_importances_
 #shrink_modes = ["hs", "hs_entropy", "hs_log_cardinality", "hs_permutation"]
 lambdas = [0., 0.1, 1.0, 10.0, 25.0, 50.0, 100.0]
 
+###################################
 # Hierarchical Shrinkage
+###################################
+
 shrink_mode = ["hs"]
 
 # Create base classifier
@@ -47,7 +50,39 @@ best_idx = np.argmax(lmb_scores)
 best_lmb = lambdas[best_idx]
 
 # Get feature importances for best value of lambda
-hsc.shrink_mode = shrink_mode
+hsc.shrink_mode = shrink_mode[0]
 hsc.lmb = best_lmb
 hsc.fit(X, y)
-FI_hs = hsc.estimator_.feature_importances_
+FI_hsc = hsc.estimator_.feature_importances_
+
+#########################################
+# Entropy-based Hierarchical Shrinkage
+#########################################
+
+shrink_mode = ["hs_entropy"]
+
+# Create base classifier
+ehsc = ShrinkageClassifier(RandomForestClassifier())
+
+# Perform grid search for best value of lambda
+param_grid = {"shrink_mode": shrink_mode, "lmb": lambdas}
+
+lmb_scores = cross_val_shrinkage(
+    ehsc,
+    X,
+    y,
+    param_grid,
+    n_splits=5,
+    n_jobs=1,
+    return_param_values=False,
+    verbose=0,
+)
+
+best_idx = np.argmax(lmb_scores)
+best_lmb = lambdas[best_idx]
+
+# Get feature importances for best value of lambda
+ehsc.shrink_mode = shrink_mode[0]
+ehsc.lmb = best_lmb
+ehsc.fit(X, y)
+FI_ehsc = ehsc.estimator_.feature_importances_
