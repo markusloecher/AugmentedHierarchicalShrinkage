@@ -110,7 +110,7 @@ def _compute_alpha(X_train, y_train, feature, threshold, criterion):
     # Also adding \epsilon to alpha itself, since it will be used as a 
     # denominator
     
-    return np.maximum(alpha, 0) + 1e-4
+    return np.maximum(alpha, 0) + 1e-4, best_impurity_reduction, orig_impurity_reduction
 
 
 class ShrinkageEstimator(BaseEstimator):
@@ -161,12 +161,13 @@ class ShrinkageEstimator(BaseEstimator):
 
             entropies[node] = np.maximum(scipy.stats.entropy(counts), 1)
             log_cardinalities[node] = np.log(len(counts))
-            alphas[node] = _compute_alpha(
+            alphas[node], best_impurity_reduction, orig_impurity_reduction = _compute_alpha(
                 X_train, y_train, feature, threshold, criterion
             )
-            f=open('alphas.dat','ab')
-            a = np.array([node, feature, alphas[node]])
-            np.savetxt(f,a)
+            f=open('alphas.txt','ab')
+            a = {"node":[node], "feature":[feature], "n": n, "bi": best_impurity_reduction, "oi": orig_impurity_reduction, "alpha" : np.round([alphas[node]], 5)}#np.array([2, 3, 0.5])
+            df = pd.DataFrame(a)
+            df.to_csv(f, index=False, header= False)
             f.close()
             left_rows = split_feature <= threshold
             X_train_left = X_train[left_rows]
