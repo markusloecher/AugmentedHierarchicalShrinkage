@@ -137,6 +137,13 @@ def _compute_global_alpha(X, y, feature, criterion):
         X, y_shuffled, feature, criterion
     )
 
+    # Compute best impurity reduction for shuffled feature
+    # X_shuffled = X.copy()
+    # X_shuffled[:, feature] = np.random.permutation(X[:, feature])
+    # best_shuffled_impurity_reduction = _compute_best_impurity_reduction(
+    #     X_shuffled, y, feature, criterion
+    # )
+
     # Compute alpha
     # Adding \epsilon to both terms to prevent extreme values of alpha
     best_shuffled_impurity_reduction = best_shuffled_impurity_reduction + 1e-4
