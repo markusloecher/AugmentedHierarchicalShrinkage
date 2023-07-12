@@ -13,7 +13,7 @@ def set_box_color(bp, color):
 
 
 def plot_importances(result, relevance):
-    colors = ['blue', 'red', 'green', 'orange', 'purple']
+    colors = ['blue', 'red', 'green', 'orange', 'purple', 'brown']
     fig, ax = plt.subplots()
     importances = result[relevance]
     width = 0.1

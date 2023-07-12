@@ -29,7 +29,7 @@ REG_DATASETS = [
     ("diabetes-reg", "diabetes", "sklearn"),
     ("abalone", "183", "openml"),
     ("satellite-image", "294_satellite_image", "pmlb"),
-    ("california-housing", "california_housing", "sklearn"),
+    #("california-housing", "california_housing", "sklearn"),
 ]
 
 
@@ -140,6 +140,7 @@ if __name__ == "__main__":
         "hs_entropy",
         "hs_log_cardinality",
         "hs_permutation",
+        "hs_global_permutation"
     ]
     parser = argparse.ArgumentParser()
     parser.add_argument(
@@ -153,7 +154,7 @@ if __name__ == "__main__":
         type=str,
         nargs="+",
         choices=all_shrinkage_types,
-        default=["hs_permutation"],
+        default=all_shrinkage_types,
     )
     args = parser.parse_args()
 
