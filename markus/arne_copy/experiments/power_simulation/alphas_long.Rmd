@@ -1,0 +1,139 @@
+---
+title: "A closer look at the alphas"
+author: "Loecher"
+date: "2023-07-07"
+output:
+  html_document: default
+  pdf_document: default
+---
+
+```{r setup, include=FALSE, message=FALSE}
+knitr::opts_chunk$set(echo = F)
+library(ggplot2)
+library(dplyr)
+```
+\textit{Adaptive HS} penalizes for \textbf{both} sample size \textbf{and} either entropy $S\left( x(t_{l-1}) \right)$ of the feature to split on, or evidence of over fitting. 
+We propose to measure the latter by using the idea of permutation based surrogate data put forward by (Nembrini et al.) as follows.
+Comparing the achieved impurity reduction $\Delta(t_{l-1}, x(t_{l-1}))$  with one based on shuffled/permuted versions of the relevant feature $\Delta(t_{l-1}, { }_\pi x(t_{l-1}))$:
+ \begin{equation}
+\alpha(t_{l-1}) := 1 - \frac{\Delta(t_{l-1}, { }_\pi x(t_{l-1})) + \epsilon}{\Delta(t_{l-1}, x(t_{l-1}))+ \epsilon},
+\label{eq:PermShrinkdef}
+\end{equation}
+where $\epsilon \sim 10^{-4}$ is a small constant added for numerical stability.
+The so defined multiplier $\alpha(t_{l-1})$ has the following characteristics: (i) $\alpha(t_{l-1}) \approx 1$ if the impurity gain of the random split is much smaller than the original one and (ii) $\alpha(t_{l-1}) \approx 0$ if they are comparable\footnote{Note that we do not allow negative values for $\alpha(t_{l-1}) $, i.e. we threshold: $\alpha(t_{l-1}) = max(\alpha(t_{l-1}) ,0)$}, i.e. when there is  strong evidence for over fitting.
+
+The rest of the paper investigates the effect of these two feature dependent shrinkage schemes:
+
+1. Entropy based shrinkage
+\begin{equation}
+\gamma^S := 1 + S\left( x(t_{l-1}) \right) \cdot \lambda/N(t_{l-1}), % \; \; \gamma^S_2 := S(x_{l-1})  \cdot \left(  1 +  \lambda/N(t_{l-1})\right)
+\label{eq:adHS1def}
+\end{equation}
+
+2. Split Quality based shrinkage
+\begin{equation}
+\gamma^I :=  1 + \frac{\lambda}{\alpha(t_{l-1}) N(t_{l-1}) } , \text{or } \gamma^I :=  1 + \frac{\lambda}{(\alpha(t_{l-1}) +  \epsilon) N(t_{l-1})} ,
+\label{eq:adHS2def}
+\end{equation}
+ 
+ where again we add a small constant $\epsilon$  for numerical stability.
+ 
+### Empirical Results
+ 
+```{r, echo =FALSE}
+setwd("/Users/loecherm/Documents/GitHub/AugmentedHierarchicalShrinkage/markus/arne_copy/experiments/power_simulation")
+
+alphas <- read.csv("~/Documents/GitHub/AugmentedHierarchicalShrinkage/markus/arne_copy/experiments/power_simulation/alphas_01.txt", header=FALSE)
+colnames(alphas) = c("node", "feature", "n", "p_DI", "o_DI", "alpha")
+alphas[,"feature"] =alphas[,"feature"] +1
+```
+ 
+```{r, echo = FALSE}
+alphas[,"depth"] = cut(alphas[,"node"], breaks = c(-1,0,2,30,200), include.lowest = F)
+alphas[,"sample"] = cut(alphas[,"n"], breaks = c(0,10,30,200), include.lowest = F)
+```
+
+ 
+ The following results are for the Strobl power simulation with $r=0.2$
+ 
+ We save the $\alpha(t_{l-1}$ values along with node id, depth information and sample size as well as impurity reduction.
+
+I find it surprising that (i) the non informative features produce plenty of $\alpha(t_{l-1}$ values $> 0.5$, and (ii) that the informative feature $x_2$ produces plenty of $\alpha(t_{l-1}=0$ values
+
+
+##### $\alpha$ values per feature and node depth:
+
+```{r, fig.width=7, message=FALSE}
+ggplot(alphas, aes(alpha, fill = depth)) + 
+  geom_histogram(alpha = 0.75)+#, position = "dodge") + 
+  #geom_density() +
+  facet_wrap(~feature) +
+  #scale_x_log10( ) +
+  #scale_y_log10( )
+  scale_y_sqrt( )
+```
+
+##### $\alpha$ values per feature and sample size:
+
+```{r, fig.width=7, message=FALSE}
+ggplot(alphas, aes(alpha, fill = sample)) + 
+  geom_histogram(alpha = 0.75)+#, position = "dodge") + 
+  #geom_density() +
+  facet_wrap(~feature) +
+  #scale_x_log10( ) +
+  #scale_y_log10( )
+  scale_y_sqrt( )
+```
+
+##### impurity reductions per feature:
+
+```{r, fig.width=7, message=FALSE}
+ggplot(alphas, aes(o_DI)) + 
+  geom_histogram(, fill = "blue")+#, position = "dodge") + 
+  #geom_density() +
+  facet_wrap(~feature) +
+  #scale_x_log10( ) +
+  scale_x_sqrt( ) +
+  scale_y_sqrt( )
+```
+
+
+##### impurity reductions per feature and tree depth:
+
+```{r, fig.width=7, message=FALSE}
+ggplot(alphas, aes(x = o_DI, y = p_DI, color = depth)) +
+  geom_point(alpha = 0.5, size=0.75) +
+  facet_wrap(~feature) +
+  xlab("IR original") + ylab("IR permuted") +
+  geom_abline(intercept = 0, slope = 1, col = 2) +
+  scale_x_sqrt( ) +
+  #scale_y_log10( )
+  scale_y_sqrt( )
+  #scale_x_log10( ) +
+  #scale_y_log10( )
+  #scale_y_sqrt( )
+```
+
+##### impurity reductions per feature and sample size:
+
+```{r, fig.width=7, message=FALSE}
+ggplot(alphas, aes(x = o_DI, y = p_DI, color = sample)) +
+  geom_point(alpha = 0.5, size=0.75) +
+  facet_wrap(~feature) +
+  xlab("IR original") + ylab("IR permuted") +
+  geom_abline(intercept = 0, slope = 1, col = 2) +
+  scale_x_sqrt( ) +
+  #scale_y_log10( )
+  scale_y_sqrt( )
+```
+
+```{r, echo=TRUE}
+alphas %>% group_by(feature) %>% summarise(originalIR0 = mean(o_DI<0.1))
+```
+
+-------------------------------------------------------
+
+I want to understand sklearn's splitting criteria in more detail.
+
+* Will the tree keep splitting, even if the impurity reduction is $0$?
+* If one "exhausted" the levels of a categorical variable, will it still be part of the candidate list of potential splits?

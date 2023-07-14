@@ -7,9 +7,10 @@ output:
   pdf_document: default
 ---
 
-```{r setup, include=FALSE}
+```{r setup, include=FALSE, message=FALSE}
 knitr::opts_chunk$set(echo = F)
 library(ggplot2)
+library(dplyr)
 ```
 \textit{Adaptive HS} penalizes for \textbf{both} sample size \textbf{and} either entropy $S\left( x(t_{l-1}) \right)$ of the feature to split on, or evidence of over fitting. 
 We propose to measure the latter by using the idea of permutation based surrogate data put forward by (Nembrini et al.) as follows.
@@ -50,6 +51,9 @@ alphas[,"feature"] =alphas[,"feature"] +1
 ```{r, echo = FALSE}
 alphas[,"depth"] = cut(alphas[,"node"], breaks = c(-1,0,2,30,200), include.lowest = F)
 alphas[,"sample"] = cut(alphas[,"n"], breaks = c(0,10,30,200), include.lowest = F)
+#normalize??:
+alphas[,"p_DI"] = alphas[,"p_DI"]/alphas[,"n"]
+alphas[,"o_DI"] = alphas[,"o_DI"]/alphas[,"n"]
 ```
 
  
@@ -60,9 +64,10 @@ alphas[,"sample"] = cut(alphas[,"n"], breaks = c(0,10,30,200), include.lowest = 
 I find it surprising that (i) the non informative features produce plenty of $\alpha(t_{l-1}$ values $> 0.5$, and (ii) that the informative feature $x_2$ produces plenty of $\alpha(t_{l-1}=0$ values
 
 
-##### $\alpha$ values per feature and node depth:
 
-```{r, fig.width=7, message=FALSE}
+
+```{r, fig.width=7, message=FALSE, eval=FALSE}
+##### $\alpha$ values per feature and node depth:
 ggplot(alphas, aes(alpha, fill = depth)) + 
   geom_histogram(alpha = 0.75)+#, position = "dodge") + 
   #geom_density() +
@@ -84,17 +89,51 @@ ggplot(alphas, aes(alpha, fill = sample)) +
   scale_y_sqrt( )
 ```
 
-##### $\alpha$ values per feature and sample size:
-
+##### impurity reductions per feature:
 
 ```{r, fig.width=7, message=FALSE}
-ggplot(alphas, aes(alpha, fill = depth)) + 
-  geom_histogram(alpha = 0.75)+#, position = "dodge") + 
+ggplot(alphas, aes(o_DI)) + 
+  geom_histogram(, fill = "blue")+#, position = "dodge") + 
   #geom_density() +
   facet_wrap(~feature) +
   #scale_x_log10( ) +
-  #scale_y_log10( )
+  #scale_x_sqrt( ) +
   scale_y_sqrt( )
+```
+
+
+
+
+```{r, fig.width=7, message=FALSE, eval = FALSE}
+##### impurity reductions per feature and tree depth:
+ggplot(alphas, aes(x = o_DI, y = p_DI, color = depth)) +
+  geom_point(alpha = 0.5, size=0.75) +
+  facet_wrap(~feature) +
+  xlab("IR original") + ylab("IR permuted") +
+  geom_abline(intercept = 0, slope = 1, col = 2) 
+  #scale_x_sqrt( ) +
+  #scale_y_log10( )
+  #scale_y_sqrt( )
+  #scale_x_log10( ) +
+  #scale_y_log10( )
+  #scale_y_sqrt( )
+```
+
+##### impurity reductions per feature and sample size:
+
+```{r, fig.width=7, message=FALSE}
+ggplot(alphas, aes(x = o_DI, y = p_DI, color = sample)) +
+  geom_point(alpha = 0.5, size=0.75) +
+  facet_wrap(~feature) +
+  xlab("IR original") + ylab("IR permuted") +
+  geom_abline(intercept = 0, slope = 1, col = 2) 
+  #scale_x_sqrt( ) +
+  #scale_y_log10( )
+  #scale_y_sqrt( )
+```
+
+```{r, echo=TRUE}
+alphas %>% group_by(feature) %>% summarise(originalIR0 = mean(o_DI<0.01))
 ```
 
 -------------------------------------------------------

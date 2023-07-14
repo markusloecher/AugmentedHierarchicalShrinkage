@@ -60,12 +60,14 @@ def _entropy(y):
     return scipy.stats.entropy(counts)
 
 
-def _impurity_reduction(criterion_fn, y_train, y_left, y_right):
-    return (
-        len(y_left) * criterion_fn(y_left)
+def _impurity_reduction(criterion_fn, y_train, y_left, y_right, normalize=True):
+    IR = (len(y_left) * criterion_fn(y_left) 
         + len(y_right) * criterion_fn(y_right)
-        - len(y_train) * criterion_fn(y_train)
-    )
+        - len(y_train) * criterion_fn(y_train))
+    if normalize:
+        return(IR/len(y_train))
+    else:
+        return(IR)
     
 def _compute_alpha(X_train, y_train, feature, threshold, criterion):
     # Compute impurity reduction of the split
