@@ -1,6 +1,9 @@
+venv
+venv-*
 .vscode
 arne/data
 arne/output
+arne/build
 arne/**/*.pkl
 Session.vim
 *.egg-info

@@ -153,7 +153,7 @@ if __name__ == "__main__":
         type=str,
         nargs="+",
         choices=all_shrinkage_types,
-        default=["hs_permutation"],
+        default=all_shrinkage_types,
     )
     args = parser.parse_args()
 
@@ -167,7 +167,9 @@ if __name__ == "__main__":
     # CLASSIFICATION #
     ##################
     print("Running classification experiments...")
-    for ds_name, ds_id, ds_source in tqdm(CLF_DATASETS):
+    prog = tqdm(CLF_DATASETS)
+    for ds_name, ds_id, ds_source in prog:
+        prog.set_description(ds_name)
         if args.model_type == "dt":
             base_estimator = DecisionTreeClassifier()
         elif args.model_type == "rf":
@@ -197,7 +199,9 @@ if __name__ == "__main__":
     # REGRESSION #
     ##############
     print("Running regression experiments...")
-    for ds_name, ds_id, ds_source in tqdm(REG_DATASETS):
+    prog = tqdm(REG_DATASETS)
+    for ds_name, ds_id, ds_source in prog:
+        prog.set_description(ds_name)
         if args.model_type == "dt":
             base_estimator = DecisionTreeRegressor()
         elif args.model_type == "rf":
