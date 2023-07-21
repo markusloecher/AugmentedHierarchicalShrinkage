@@ -99,7 +99,7 @@ if __name__ == "__main__":
     lambdas = [0., 0.1, 1.0, 10.0, 25.0, 50.0, 100.0]
     relevances = [0.0, 0.05, 0.1, 0.15, 0.2]
     relevances_str = ["{:.2f}".format(rel)[2:] for rel in relevances]
-    shrink_modes = ["hs", "hs_entropy", "hs_log_cardinality", "hs_permutation"]
+    shrink_modes = ["hs", "hs_entropy", "hs_log_cardinality", "hs_permutation", "hs_global_permutation"]
 
     if args.n_jobs != 1:
         results = joblib.Parallel(n_jobs=args.n_jobs, verbose=args.verbose)(

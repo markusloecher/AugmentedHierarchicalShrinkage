@@ -1,6 +1,4 @@
 from abc import abstractmethod
-import pandas as pd
-import time
 from copy import deepcopy
 from typing import Tuple, List
 from tqdm import tqdm
@@ -17,6 +15,29 @@ from sklearn.metrics import (
     roc_auc_score,
 )
 from joblib import Parallel, delayed
+
+
+def _gini(y):
+    # Computes the Gini impurity of a vector of labels:
+    # 1 - \sum_i (p_i)^2
+    _, counts = np.unique(y, return_counts=True)
+    return 1 - np.sum(np.power(counts / len(y), 2))
+
+
+def _entropy(y):
+    _, counts = np.unique(y, return_counts=True)
+    return scipy.stats.entropy(counts)
+
+
+_CRITERION_FNS = {
+    "gini": _gini,
+    "entropy": _entropy,
+    "log_loss": _entropy,  # Log loss and entropy are the same
+    "squared_error": lambda y: np.var(y),
+    "friedman_mse": lambda y: np.var(y),  # TODO
+    "absolute_error": lambda y: np.mean(np.abs(y - np.median(y))),
+    "poisson": lambda y: np.var(y),  # TODO
+}
 
 
 def _check_fit_arguments(
@@ -52,68 +73,82 @@ def _update_tree_values(dt, value, node):
     # assert not np.isnan(dt.tree_.impurity[node]), "Impurity is NaN"
 
 
-def _gini(y):
-    # Computes the Gini impurity of a vector of labels:
-    # 1 - \sum_i (p_i)^2
-    _, counts = np.unique(y, return_counts=True)
-    return 1 - np.sum(np.power(counts / len(y), 2))
+def _impurity_reduction(criterion_fn, X, y, feature, threshold):
+    # Compute impurity reduction of the split
+    split_feature = X[:, feature]
+    y_left = y[split_feature <= threshold]
+    y_right = y[split_feature > threshold]
 
-
-def _entropy(y):
-    _, counts = np.unique(y, return_counts=True)
-    return scipy.stats.entropy(counts)
-
-
-def _impurity_reduction(criterion_fn, y_train, y_left, y_right):
     return (
-        len(y_train) * criterion_fn(y_train)
+        len(y) * criterion_fn(y)
         - len(y_left) * criterion_fn(y_left)
         - len(y_right) * criterion_fn(y_right)
     )
 
 
-def _compute_alpha(X_train, y_train, feature, threshold, criterion):
+def _compute_best_impurity_reduction(X, y, feature, criterion):
     # Compute impurity reduction of the split
-    split_feature = X_train[:, feature]
-    y_left = y_train[split_feature <= threshold]
-    y_right = y_train[split_feature > threshold]
-    criterion_fn = {
-        "gini": _gini,
-        "entropy": _entropy,
-        "log_loss": _entropy,  # Log loss and entropy are the same
-        "squared_error": lambda y: np.var(y),
-        "friedman_mse": lambda y: np.var(y),  # TODO
-        "absolute_error": lambda y: np.mean(np.abs(y - np.median(y))),
-        "poisson": lambda y: np.var(y),  # TODO
-    }[criterion]
-
-    orig_impurity_reduction = _impurity_reduction(
-        criterion_fn, y_train, y_left, y_right
-    )
-
-    # Compute best impurity reduction of a random split
-    # Shuffle the labels
-    y_train_shuffled = np.random.permutation(y_train)
-
-    # For each threshold
-    thresholds = np.unique(split_feature)
+    thresholds = np.unique(X[:, feature])
     best_impurity_reduction = -np.inf
+    criterion_fn = _CRITERION_FNS[criterion]
+
     for threshold in thresholds[:-1]:
-        # Compute impurity reduction of the split
-        left_coords = split_feature <= threshold
-        y_left = y_train_shuffled[left_coords]
-        y_right = y_train_shuffled[~left_coords]
         impurity_reduction = _impurity_reduction(
-            criterion_fn, y_train_shuffled, y_left, y_right
+            criterion_fn, X, y, feature, threshold
         )
         if impurity_reduction > best_impurity_reduction:
             best_impurity_reduction = impurity_reduction
+    return best_impurity_reduction
+
+
+def _compute_alpha(X_cond, y_cond, feature, threshold, criterion):
+    # Compute original impurity reduction
+    criterion_fn = _CRITERION_FNS[criterion]
+    orig_impurity_reduction = _impurity_reduction(
+        criterion_fn, X_cond, y_cond, feature, threshold
+    )
+
+    # Compute best impurity reduction for the shuffled labels
+    y_shuffled = np.random.permutation(y_cond)
+    best_shuffled_impurity_reduction = _compute_best_impurity_reduction(
+        X_cond, y_shuffled, feature, criterion
+    )
 
     # Compute alpha
     # Adding \epsilon to both terms to prevent extreme values of alpha
-    best_impurity_reduction = best_impurity_reduction + 1e-4
+    best_shuffled_impurity_reduction = best_shuffled_impurity_reduction + 1e-4
     orig_impurity_reduction = orig_impurity_reduction + 1e-4
-    alpha = 1 - best_impurity_reduction / orig_impurity_reduction
+    alpha = 1 - best_shuffled_impurity_reduction / orig_impurity_reduction
+    # Also adding \epsilon to alpha itself, since it will be used as a
+    # denominator
+    return np.maximum(alpha, 0) + 1e-4
+
+
+def _compute_global_alpha(
+    X_cond, X_cond_shuffled, y_cond, feature, threshold, criterion
+):
+    """
+    This is basically the same function as _compute_alpha, but instead of
+    shuffling the labels, we use a previously shuffled version of the columns.
+    This ensures that the same permutation is used for all nodes.
+    """
+    
+    # Compute original impurity reduction
+    criterion_fn = _CRITERION_FNS[criterion]
+    orig_impurity_reduction = _impurity_reduction(
+        criterion_fn, X_cond, y_cond, feature, threshold
+    )
+
+    # Compute best impurity reduction for the shuffled labels
+    best_shuffled_impurity_reduction = _compute_best_impurity_reduction(
+        X_cond_shuffled, y_cond, feature, criterion
+    )
+
+    # Compute alpha
+    # Adding \epsilon to both terms to prevent extreme values of alpha
+    best_shuffled_impurity_reduction = best_shuffled_impurity_reduction + 1e-4
+    orig_impurity_reduction = orig_impurity_reduction + 1e-4
+    alpha = 1 - best_shuffled_impurity_reduction / orig_impurity_reduction
     # Also adding \epsilon to alpha itself, since it will be used as a
     # denominator
     return np.maximum(alpha, 0) + 1e-4
@@ -141,12 +176,15 @@ class ShrinkageEstimator(BaseEstimator):
     def _compute_node_values_rec(
         self,
         dt,
-        X_train,
-        y_train,
+        X_cond,
+        y_cond,
         node=0,
         entropies=None,
         log_cardinalities=None,
         alphas=None,
+        global_alphas=None,
+        X_shuffled=None,
+        X_shuffled_cond=None,
     ):
         """
         Compute the entropy of each node in the tree.
@@ -154,6 +192,32 @@ class ShrinkageEstimator(BaseEstimator):
         Note that if shrink_mode is "hs_permutation", the returned values
         are not technically "entropies", but rather the $\alpha$ values
         used in the permutation-based shrinkage.
+
+        Parameters
+        ----------
+        dt : DecisionTreeClassifier or DecisionTreeRegressor
+            The decision tree to compute the node values for.
+        X_cond : np.ndarray
+            The training data conditioned on the current node.
+        y_cond : np.ndarray
+            The labels conditioned on the current node.
+        node : int
+            The current node.
+        entropies : np.ndarray
+            The entropies of the nodes in the tree.
+        log_cardinalities : np.ndarray
+            The log cardinalities of the nodes in the tree.
+        alphas : np.ndarray
+            The $\alpha$ values of the nodes in the tree.
+        global_alphas : np.ndarray
+            The $\alpha$ values of the nodes in the tree, computed globally
+            (i.e. not conditioned on the current node).
+        X_shuffled : np.ndarray
+            Full training data with the columns shuffled.
+            Columns are shuffled separately.
+        X_shuffled_cond : np.ndarray
+            Training data conditioned on the current node, with the columns
+            shuffled.
         """
         left = dt.tree_.children_left[node]
         right = dt.tree_.children_right[node]
@@ -161,27 +225,42 @@ class ShrinkageEstimator(BaseEstimator):
         threshold = dt.tree_.threshold[node]
         criterion = dt.criterion
 
+        # Initialize arrays if not provided
         if entropies is None:
-            entropies = np.zeros(len(dt.tree_.n_node_samples))
-            log_cardinalities = np.zeros(len(dt.tree_.n_node_samples))
-            alphas = np.zeros(len(dt.tree_.n_node_samples))
+            num_nodes = len(dt.tree_.n_node_samples)
+            entropies = np.zeros(num_nodes)
+            log_cardinalities = np.zeros(num_nodes)
+            alphas = np.zeros(num_nodes)
+            global_alphas = np.zeros(num_nodes)
+
+            # Shuffle the columns of X separately
+            X_shuffled = X_cond.copy()
+            for i in range(X_shuffled.shape[1]):
+                X_shuffled[:, i] = np.random.permutation(X_shuffled[:, i])
+            X_shuffled_cond = X_shuffled.copy()
 
         # If not leaf node, compute entropy, cardinality, and alpha of the node
         if not (left == -1 and right == -1):
-            split_feature = X_train[:, feature]
+            split_feature = X_cond[:, feature]
             _, counts = np.unique(split_feature, return_counts=True)
 
             entropies[node] = np.maximum(scipy.stats.entropy(counts), 1)
             log_cardinalities[node] = np.log(len(counts))
             alphas[node] = _compute_alpha(
-                X_train, y_train, feature, threshold, criterion
+                X_cond, y_cond, feature, threshold, criterion
+            )
+            global_alphas[node] = _compute_global_alpha(
+                X_cond, X_shuffled_cond, y_cond, feature, threshold, criterion
             )
 
             left_rows = split_feature <= threshold
-            X_train_left = X_train[left_rows]
-            X_train_right = X_train[~left_rows]
-            y_train_left = y_train[left_rows]
-            y_train_right = y_train[~left_rows]
+            X_train_left = X_cond[left_rows]
+            X_train_right = X_cond[~left_rows]
+            y_train_left = y_cond[left_rows]
+            y_train_right = y_cond[~left_rows]
+            X_shuffled_left = X_shuffled_cond[left_rows]
+            X_shuffled_right = X_shuffled_cond[~left_rows]
+
 
             # Recursively compute entropy and cardinality of the children
             self._compute_node_values_rec(
@@ -192,6 +271,9 @@ class ShrinkageEstimator(BaseEstimator):
                 entropies,
                 log_cardinalities,
                 alphas,
+                global_alphas,
+                X_shuffled,
+                X_shuffled_left,
             )
             self._compute_node_values_rec(
                 dt,
@@ -201,19 +283,24 @@ class ShrinkageEstimator(BaseEstimator):
                 entropies,
                 log_cardinalities,
                 alphas,
+                global_alphas,
+                X_shuffled,
+                X_shuffled_right,
             )
-        return entropies, log_cardinalities, alphas
+        return entropies, log_cardinalities, alphas, global_alphas
 
     def _compute_node_values(self, X, y):
         self.entropies_ = []
         self.log_cardinalities_ = []
         self.alphas_ = []
+        self.global_alphas_ = []
         if hasattr(self.estimator_, "estimators_"):  # Random Forest
             for estimator in self.estimator_.estimators_:
                 (
                     entropies,
                     log_cardinalities,
                     alphas,
+                    global_alphas,
                 ) = self._compute_node_values_rec(estimator, X, y)
                 self.entropies_.append(entropies)
                 self.log_cardinalities_.append(log_cardinalities)
@@ -223,10 +310,12 @@ class ShrinkageEstimator(BaseEstimator):
                 entropies,
                 log_cardinalities,
                 alphas,
+                global_alphas,
             ) = self._compute_node_values_rec(self.estimator_, X, y)
             self.entropies_.append(entropies)
             self.log_cardinalities_.append(log_cardinalities)
             self.alphas_.append(alphas)
+            self.global_alphas_.append(global_alphas)
 
     def _shrink_tree_rec(
         self,
@@ -264,6 +353,8 @@ class ShrinkageEstimator(BaseEstimator):
                     node_value = self.log_cardinalities_[dt_idx][parent_node]
                 elif self.shrink_mode == "hs_permutation":
                     node_value = 1 / self.alphas_[dt_idx][parent_node]
+                elif self.shrink_mode == "hs_global_permutation":
+                    node_value = 1 / self.global_alphas_[dt_idx][parent_node]
                 else:
                     raise ValueError(
                         f"Unknown shrink mode: {self.shrink_mode}"
@@ -329,6 +420,7 @@ class ShrinkageEstimator(BaseEstimator):
             "hs_entropy",
             "hs_log_cardinality",
             "hs_permutation",
+            "hs_global_permutation",
         ]:
             raise ValueError("Invalid choice for shrink_mode")
         X, y, feature_names = _check_fit_arguments(
@@ -473,5 +565,6 @@ def cross_val_shrinkage(
 if __name__ == "__main__":
     from sklearn.ensemble import RandomForestClassifier, RandomForestRegressor
 
+    print("Testing ShrinkageClassifier and ShrinkageRegressor...")
     check_estimator(ShrinkageClassifier(RandomForestClassifier()))
     check_estimator(ShrinkageRegressor(RandomForestRegressor()))
