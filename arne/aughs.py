@@ -1,6 +1,4 @@
 from abc import abstractmethod
-import pandas as pd
-import time
 from copy import deepcopy
 from typing import Tuple, List
 from tqdm import tqdm
@@ -103,16 +101,17 @@ def _compute_best_impurity_reduction(X, y, feature, criterion):
     return best_impurity_reduction
 
 
-def _compute_alpha(X, y, feature, threshold, criterion):
+def _compute_alpha(X_cond, y_cond, feature, threshold, criterion):
+    # Compute original impurity reduction
     criterion_fn = _CRITERION_FNS[criterion]
     orig_impurity_reduction = _impurity_reduction(
-        criterion_fn, X, y, feature, threshold
+        criterion_fn, X_cond, y_cond, feature, threshold
     )
 
     # Compute best impurity reduction for the shuffled labels
-    y_shuffled = np.random.permutation(y)
+    y_shuffled = np.random.permutation(y_cond)
     best_shuffled_impurity_reduction = _compute_best_impurity_reduction(
-        X, y_shuffled, feature, criterion
+        X_cond, y_shuffled, feature, criterion
     )
 
     # Compute alpha
@@ -125,30 +124,31 @@ def _compute_alpha(X, y, feature, threshold, criterion):
     return np.maximum(alpha, 0) + 1e-4
 
 
-def _compute_global_alpha(X, y, feature, criterion):
-    # Compute best impurity reduction without shuffling
-    best_impurity_reduction = _compute_best_impurity_reduction(
-        X, y, feature, criterion
+def _compute_global_alpha(
+    X_cond, X_cond_shuffled, y_cond, feature, threshold, criterion
+):
+    """
+    This is basically the same function as _compute_alpha, but instead of
+    shuffling the labels, we use a previously shuffled version of the columns.
+    This ensures that the same permutation is used for all nodes.
+    """
+    
+    # Compute original impurity reduction
+    criterion_fn = _CRITERION_FNS[criterion]
+    orig_impurity_reduction = _impurity_reduction(
+        criterion_fn, X_cond, y_cond, feature, threshold
     )
 
     # Compute best impurity reduction for the shuffled labels
-    y_shuffled = np.random.permutation(y)
     best_shuffled_impurity_reduction = _compute_best_impurity_reduction(
-        X, y_shuffled, feature, criterion
+        X_cond_shuffled, y_cond, feature, criterion
     )
-
-    # Compute best impurity reduction for shuffled feature
-    # X_shuffled = X.copy()
-    # X_shuffled[:, feature] = np.random.permutation(X[:, feature])
-    # best_shuffled_impurity_reduction = _compute_best_impurity_reduction(
-    #     X_shuffled, y, feature, criterion
-    # )
 
     # Compute alpha
     # Adding \epsilon to both terms to prevent extreme values of alpha
     best_shuffled_impurity_reduction = best_shuffled_impurity_reduction + 1e-4
-    best_impurity_reduction = best_impurity_reduction + 1e-4
-    alpha = 1 - best_shuffled_impurity_reduction / best_impurity_reduction
+    orig_impurity_reduction = orig_impurity_reduction + 1e-4
+    alpha = 1 - best_shuffled_impurity_reduction / orig_impurity_reduction
     # Also adding \epsilon to alpha itself, since it will be used as a
     # denominator
     return np.maximum(alpha, 0) + 1e-4
@@ -183,7 +183,8 @@ class ShrinkageEstimator(BaseEstimator):
         log_cardinalities=None,
         alphas=None,
         global_alphas=None,
-        feature_global_alphas=None,
+        X_shuffled=None,
+        X_shuffled_cond=None,
     ):
         """
         Compute the entropy of each node in the tree.
@@ -211,8 +212,12 @@ class ShrinkageEstimator(BaseEstimator):
         global_alphas : np.ndarray
             The $\alpha$ values of the nodes in the tree, computed globally
             (i.e. not conditioned on the current node).
-        feature_global_alphas : np.ndarray
-            The global $\alpha$ values for each feature.
+        X_shuffled : np.ndarray
+            Full training data with the columns shuffled.
+            Columns are shuffled separately.
+        X_shuffled_cond : np.ndarray
+            Training data conditioned on the current node, with the columns
+            shuffled.
         """
         left = dt.tree_.children_left[node]
         right = dt.tree_.children_right[node]
@@ -228,16 +233,11 @@ class ShrinkageEstimator(BaseEstimator):
             alphas = np.zeros(num_nodes)
             global_alphas = np.zeros(num_nodes)
 
-        # Compute global alpha values per feature
-        # These values only depend on the split feature, not the data in the node.
-        # Therefore, we only need to compute them once for each feature.
-        # The global alpha value for a node is then the global alpha value of
-        # the split feature.
-        if feature_global_alphas is None:
-            feature_global_alphas = np.array([
-                _compute_global_alpha(X_cond, y_cond, f, criterion)
-                for f in range(X_cond.shape[1])
-            ])
+            # Shuffle the columns of X separately
+            X_shuffled = X_cond.copy()
+            for i in range(X_shuffled.shape[1]):
+                X_shuffled[:, i] = np.random.permutation(X_shuffled[:, i])
+            X_shuffled_cond = X_shuffled.copy()
 
         # If not leaf node, compute entropy, cardinality, and alpha of the node
         if not (left == -1 and right == -1):
@@ -249,13 +249,18 @@ class ShrinkageEstimator(BaseEstimator):
             alphas[node] = _compute_alpha(
                 X_cond, y_cond, feature, threshold, criterion
             )
-            global_alphas[node] = feature_global_alphas[feature]
+            global_alphas[node] = _compute_global_alpha(
+                X_cond, X_shuffled_cond, y_cond, feature, threshold, criterion
+            )
 
             left_rows = split_feature <= threshold
             X_train_left = X_cond[left_rows]
             X_train_right = X_cond[~left_rows]
             y_train_left = y_cond[left_rows]
             y_train_right = y_cond[~left_rows]
+            X_shuffled_left = X_shuffled_cond[left_rows]
+            X_shuffled_right = X_shuffled_cond[~left_rows]
+
 
             # Recursively compute entropy and cardinality of the children
             self._compute_node_values_rec(
@@ -267,7 +272,8 @@ class ShrinkageEstimator(BaseEstimator):
                 log_cardinalities,
                 alphas,
                 global_alphas,
-                feature_global_alphas,
+                X_shuffled,
+                X_shuffled_left,
             )
             self._compute_node_values_rec(
                 dt,
@@ -278,7 +284,8 @@ class ShrinkageEstimator(BaseEstimator):
                 log_cardinalities,
                 alphas,
                 global_alphas,
-                feature_global_alphas,
+                X_shuffled,
+                X_shuffled_right,
             )
         return entropies, log_cardinalities, alphas, global_alphas
 
